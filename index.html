@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Controle Produtivo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════
+       TELA: LOGIN
+  ═══════════════════════════════════════════ -->
+  <div id="tela-login" class="tela ativa">
+    <div class="login-bg">
+      <div class="login-grid"></div>
+    </div>
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="logo-icon">⚙</div>
+        <h1>Controle<br/><span>Produtivo</span></h1>
+      </div>
+      <div class="form-group">
+        <label>Operador</label>
+        <select id="login-operador">
+          <option value="">Carregando...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>PIN</label>
+        <div class="pin-wrap">
+          <input id="login-pin" type="password" inputmode="numeric" maxlength="6" placeholder="••••" />
+          <button class="pin-toggle" onclick="togglePin()">👁</button>
+        </div>
+      </div>
+      <button class="btn-primary" onclick="fazerLogin()">ENTRAR</button>
+      <div id="login-erro" class="mensagem-erro"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       TELA: HOME (após login)
+  ═══════════════════════════════════════════ -->
+  <div id="tela-home" class="tela">
+    <header class="app-header">
+      <div class="header-info">
+        <span id="header-operador" class="header-nome"></span>
+        <span id="header-processo" class="header-processo-badge"></span>
+      </div>
+      <button class="btn-logout" onclick="fazerLogout()">Sair</button>
+    </header>
+
+    <main class="home-grid">
+      <div class="home-card" onclick="irPara('tela-scan')">
+        <div class="home-card-icon">📷</div>
+        <div class="home-card-label">Registrar<br/>Produção</div>
+        <div class="home-card-arrow">→</div>
+      </div>
+      <div class="home-card" onclick="irPara('tela-status')">
+        <div class="home-card-icon">📋</div>
+        <div class="home-card-label">Fluxo de<br/>Processo</div>
+        <div class="home-card-arrow">→</div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       TELA: SCAN / REGISTRO
+  ═══════════════════════════════════════════ -->
+  <div id="tela-scan" class="tela">
+    <header class="app-header">
+      <button class="btn-back" onclick="irPara('tela-home')">← Voltar</button>
+      <span class="header-title">Registrar Produção</span>
+      <span id="scan-processo-badge" class="header-processo-badge"></span>
+    </header>
+
+    <div class="scan-body">
+
+      <!-- QR Input -->
+      <div class="scan-section">
+        <label class="scan-label">QR Code</label>
+        <div class="qr-input-wrap">
+          <input
+            id="qr-input"
+            type="text"
+            placeholder="Bipe ou digite o QR Code"
+            autocomplete="off"
+            onchange="processarQR(this.value)"
+          />
+          <button class="btn-camera" onclick="abrirCamera()" title="Usar câmera">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Câmera -->
+      <div id="camera-container" class="camera-container hidden">
+        <video id="camera-video" autoplay playsinline></video>
+        <div class="camera-overlay">
+          <div class="camera-frame"></div>
+        </div>
+        <button class="btn-fechar-camera" onclick="fecharCamera()">✕ Fechar câmera</button>
+      </div>
+
+      <!-- Dados lidos do QR -->
+      <div id="qr-dados" class="qr-dados hidden">
+        <div class="dado-row">
+          <span class="dado-label">OP</span>
+          <span id="dado-op" class="dado-valor"></span>
+        </div>
+        <div class="dado-row">
+          <span class="dado-label">Código</span>
+          <span id="dado-codigo" class="dado-valor"></span>
+        </div>
+        <div class="dado-row">
+          <span class="dado-label">Descrição</span>
+          <span id="dado-descricao" class="dado-valor descricao"></span>
+        </div>
+        <div class="dado-row">
+          <span class="dado-label">Qtde</span>
+          <span id="dado-qtde" class="dado-valor"></span>
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div class="scan-section">
+        <label class="scan-label">Status</label>
+        <div class="status-toggle">
+          <button id="btn-iniciado" class="status-btn iniciado ativo" onclick="selecionarStatus('I')">
+            ▶ INICIADO
+          </button>
+          <button id="btn-finalizado" class="status-btn finalizado" onclick="selecionarStatus('F')">
+            ✓ FINALIZADO
+          </button>
+        </div>
+      </div>
+
+      <!-- Processo (fixo, vem do login) -->
+      <div class="scan-section">
+        <label class="scan-label">Processo</label>
+        <div id="processo-fixo" class="processo-fixo-display"></div>
+      </div>
+
+      <!-- OBS -->
+      <div class="scan-section">
+        <label class="scan-label">Observação <span class="opcional">(opcional)</span></label>
+        <input id="scan-obs" type="text" placeholder="Observação..." class="input-obs" />
+      </div>
+
+      <!-- Botão salvar -->
+      <button class="btn-primary btn-salvar" onclick="salvarRegistro()">
+        <span id="btn-salvar-txt">SALVAR REGISTRO</span>
+      </button>
+
+      <div id="scan-feedback" class="scan-feedback hidden"></div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       TELA: FLUXO STATUS
+  ═══════════════════════════════════════════ -->
+  <div id="tela-status" class="tela">
+    <header class="app-header">
+      <button class="btn-back" onclick="irPara('tela-home')">← Voltar</button>
+      <span class="header-title">Fluxo de Processo</span>
+      <button class="btn-refresh" onclick="carregarStatus()">↺</button>
+    </header>
+
+    <div class="status-body">
+      <div class="busca-wrap">
+        <input id="busca-op" type="text" placeholder="Buscar OP..." oninput="filtrarStatus()" />
+      </div>
+      <div id="status-lista" class="status-lista">
+        <div class="carregando">Carregando...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       MODAL: SUCESSO / ERRO
+  ═══════════════════════════════════════════ -->
+  <div id="modal-overlay" class="modal-overlay hidden" onclick="fecharModal()">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div id="modal-icon" class="modal-icon"></div>
+      <div id="modal-msg" class="modal-msg"></div>
+      <button class="btn-primary" onclick="fecharModal()">OK</button>
+    </div>
+  </div>
+
+  <!-- Loading global -->
+  <div id="loading" class="loading-overlay hidden">
+    <div class="loading-spinner"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
