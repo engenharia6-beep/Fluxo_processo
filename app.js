@@ -380,15 +380,20 @@ function renderizarHistorico(hist, comBotaoApagar = false) {
     const obs      = h['OBS'] || '';
     const data     = h['Data'] || '';
     const qtde     = h['Qtde'] || '';
+    const id       = h['ID'] || '';
+    const op       = h['OP'] || '';
+    const btnApagar = comBotaoApagar
+      ? `<button class="btn-apagar-reg" onclick="apagarRegistro('${id}','${op}')">🗑</button>`
+      : '';
     return `
     <div class="hist-item hist-${acao.toLowerCase().replace(/ /g,'-')}">
       <div class="hist-header-row">
         <div class="hist-acao">${iconeAcao(acao)} ${setor}</div>
-        ${comBotaoApagar ? '<button class="btn-apagar-reg" onclick="apagarRegistro(''+h['ID']+'',''+h['OP']+'')">🗑</button>' : ''}
+        ${btnApagar}
       </div>
       <div class="hist-detalhe">Qtde: ${qtde} · ${acao}</div>
       <div class="hist-meta">👤 ${operador} · 🕐 ${formatarData(data)}</div>
-      ${obs ? '<div class="hist-obs">💬 '+obs+'</div>' : ''}
+      ${obs ? `<div class="hist-obs">💬 ${obs}</div>` : ''}
     </div>`;
   }).join('');
 }
