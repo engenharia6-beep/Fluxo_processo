@@ -46,6 +46,10 @@ async function carregarOperadores() {
   try {
     const lista = await apiGet('getOperadores');
     const sel = document.getElementById('login-operador');
+    if (!lista || lista.length === 0) {
+      sel.innerHTML = '<option value="">Nenhum operador cadastrado</option>';
+      return;
+    }
     sel.innerHTML = '<option value="">Selecione o operador</option>';
     lista.forEach(op => {
       const opt = document.createElement('option');
@@ -56,7 +60,9 @@ async function carregarOperadores() {
       sel.appendChild(opt);
     });
   } catch (e) {
-    document.getElementById('login-operador').innerHTML = '<option value="">Erro ao carregar</option>';
+    document.getElementById('login-operador').innerHTML =
+      '<option value="">Erro: ' + e.message + '</option>';
+    console.error('Erro ao carregar operadores:', e);
   }
 }
 
@@ -578,14 +584,21 @@ function escanearFrames() {
 // ============================================================
 async function apiGet(action, params = {}) {
   const qs   = new URLSearchParams({ action, ...params }).toString();
-  const resp = await fetch(`${API_URL}?${qs}`);
+  const resp = await fetch(`${API_URL}?${qs}`, {
+    redirect: 'follow',
+    method: 'GET',
+  });
   const json = await resp.json();
   if (json.status !== 'ok') throw new Error(json.message || 'Erro na API');
   return json.data;
 }
 
 async function apiPost(body) {
-  const resp = await fetch(API_URL, { method: 'POST', body: JSON.stringify(body) });
+  const resp = await fetch(API_URL, {
+    method: 'POST',
+    redirect: 'follow',
+    body: JSON.stringify(body)
+  });
   const json = await resp.json();
   if (json.status !== 'ok') throw new Error(json.message || 'Erro na API');
   return json.data;
