@@ -10,7 +10,7 @@
 </head>
 <body>
 
-<!-- ═══════════════════ LOGIN ═══════════════════ -->
+<!-- ═══════════ LOGIN ═══════════ -->
 <div id="tela-login" class="tela ativa">
   <div class="login-bg"><div class="login-grid"></div></div>
   <div class="login-card">
@@ -34,7 +34,7 @@
   </div>
 </div>
 
-<!-- ═══════════════════ MAIN ═══════════════════ -->
+<!-- ═══════════ MAIN (SETOR) ═══════════ -->
 <div id="tela-main" class="tela">
   <header class="app-header">
     <div class="header-info">
@@ -47,99 +47,96 @@
     </div>
   </header>
 
-  <!-- ── CÂMERA (compartilhada) ── -->
   <div id="camera-container" class="camera-container hidden">
     <video id="camera-video" autoplay playsinline></video>
     <div class="camera-overlay"><div class="camera-frame"></div></div>
     <button class="btn-fechar-camera" onclick="fecharCamera()">✕ Fechar câmera</button>
   </div>
 
-  <!-- ══════ SEÇÃO PCP ══════ -->
-  <div id="secao-pcp" class="secao hidden">
-    <div class="secao-titulo">🚀 Lançar OP para Estoque</div>
-
-    <!-- QR Code -->
-    <div class="campo-grupo">
-      <label>QR Code <span class="label-hint">(ou selecione da lista)</span></label>
-      <div class="qr-row">
-        <input id="pcp-qr" type="text" placeholder="Bipe para localizar a OP"
-          onchange="processarQRPCP(this.value)"/>
-        <button class="btn-camera" onclick="abrirCamera()">📷</button>
-      </div>
-    </div>
-
-    <!-- Lista de Pendências -->
+  <!-- SEÇÃO SETOR NORMAL -->
+  <div id="secao-setor" class="secao hidden">
     <div class="ops-header">
-      <span class="ops-titulo">OPs aguardando lançamento</span>
-      <button class="btn-refresh-sm" onclick="carregarPendencias()">↺ Atualizar</button>
+      <span class="ops-titulo">OPs em <strong id="setor-recebeDE"></strong></span>
+      <button class="btn-refresh-sm" onclick="carregarOPsDisponiveis()">↺</button>
     </div>
-    <div id="pcp-pendencias" class="ops-lista"></div>
-
-    <!-- Preview da OP selecionada -->
-    <div id="pcp-preview" class="pcp-preview hidden">
-      <div class="pcp-preview-info">
-        <div class="pcp-preview-header">
-          <div>
-            <div class="pcp-preview-op" id="pcp-preview-op"></div>
-            <div class="pcp-preview-cliente" id="pcp-preview-cliente"></div>
-            <div class="pcp-preview-cod" id="pcp-preview-cod"></div>
-            <div class="pcp-preview-desc" id="pcp-preview-desc"></div>
-            <div class="pcp-preview-qtde" id="pcp-preview-qtde"></div>
-          </div>
-          <div id="pcp-foto-wrap" class="pcp-foto-wrap">
-            <img id="pcp-foto" src="" alt="Foto do produto" class="pcp-foto hidden"/>
-            <div id="pcp-foto-loading" class="pcp-foto-loading hidden">⏳</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="campo-grupo">
-        <label>OBS</label>
-        <input id="pcp-obs" type="text" placeholder="Observação (opcional)"/>
-      </div>
-
-      <button class="btn-primary btn-lancar" onclick="lancarOP()">
-        🚀 LANÇAR PARA ESTOQUE
-      </button>
+    <input id="busca-setor" type="text" class="busca-campo"
+      placeholder="Buscar por OP, código ou descrição..."
+      oninput="filtrarOPs(this.value)"
+      onchange="tentarQR(this.value)"/>
+    <div id="ops-lista" class="ops-lista"></div>
+    <div class="acoes-row">
+      <button id="btn-receber" class="btn-receber" onclick="receberOP()" disabled>✅ RECEBER</button>
+      <button id="btn-rejeitar" class="btn-rejeitar hidden" onclick="abrirModalRejeitar()" disabled>↩️ REJEITAR</button>
     </div>
   </div>
 
-  <!-- ══════ SEÇÃO SETOR ══════ -->
-  <div id="secao-setor" class="secao hidden">
+  <!-- SEÇÃO PCP ADMIN -->
+  <div id="secao-pcp" class="secao hidden">
+    <!-- Tabs -->
+    <div class="pcp-tabs">
+      <button class="pcp-tab ativo" onclick="pcpTab('fluxo')">📋 Fluxo Geral</button>
+      <button class="pcp-tab" onclick="pcpTab('mover')">🔀 Mover OP</button>
+      <button class="pcp-tab" onclick="pcpTab('editar')">✏️ Editar OP</button>
+    </div>
 
-    <!-- QR / busca -->
-    <div class="campo-grupo">
-      <label>QR Code <span class="label-hint">(ou selecione abaixo)</span></label>
-      <div class="qr-row">
-        <input id="setor-qr" type="text" placeholder="Bipe para selecionar a OP"
-          onchange="processarQR(this.value)"/>
-        <button class="btn-camera" onclick="abrirCamera()">📷</button>
+    <!-- TAB: Fluxo Geral -->
+    <div id="pcp-tab-fluxo" class="pcp-tab-content">
+      <div class="ops-header">
+        <span class="ops-titulo">Todas as OPs em aberto</span>
+        <button class="btn-refresh-sm" onclick="carregarStatusAdmin()">↺</button>
       </div>
+      <div class="busca-wrap" style="margin-bottom:8px">
+        <input id="pcp-busca" type="text" placeholder="Buscar OP, código, setor..." oninput="filtrarStatusAdmin()"/>
+      </div>
+      <div id="pcp-status-lista" class="status-lista"></div>
     </div>
 
-    <!-- Lista de OPs disponíveis -->
-    <div class="ops-header">
-      <span class="ops-titulo">OPs em <strong id="setor-recebeDE"></strong></span>
-      <button class="btn-refresh-sm" onclick="carregarOPsDisponiveis()">↺ Atualizar</button>
+    <!-- TAB: Mover OP -->
+    <div id="pcp-tab-mover" class="pcp-tab-content hidden">
+      <div class="campo-grupo">
+        <label>OP</label>
+        <input id="mover-op" type="text" placeholder="Número da OP"/>
+      </div>
+      <div class="campo-grupo">
+        <label>Nova Custódia</label>
+        <select id="mover-custodia">
+          <option value="">Selecione o setor</option>
+          <option>ESTOQUE</option>
+          <option>PRODUÇÃO</option>
+          <option>QUALIDADE</option>
+          <option>CONSOLIDAÇÃO</option>
+          <option>EXPEDIDO</option>
+          <option>PA</option>
+          <option>RESERVA</option>
+        </select>
+      </div>
+      <div class="campo-grupo">
+        <label>Motivo *</label>
+        <input id="mover-motivo" type="text" placeholder="Motivo do ajuste"/>
+      </div>
+      <button class="btn-primary" onclick="moverOP()">🔀 MOVER OP</button>
     </div>
-    <div id="ops-lista" class="ops-lista"></div>
 
-    <!-- OP selecionada preview -->
-    <div id="op-preview" class="op-preview hidden"></div>
-
-    <!-- Ações -->
-    <div class="acoes-row">
-      <button id="btn-receber" class="btn-receber" onclick="receberOP()" disabled>
-        ✅ RECEBER
-      </button>
-      <button id="btn-rejeitar" class="btn-rejeitar hidden" onclick="abrirModalRejeitar()" disabled>
-        ↩️ REJEITAR
-      </button>
+    <!-- TAB: Editar OP -->
+    <div id="pcp-tab-editar" class="pcp-tab-content hidden">
+      <div class="campo-grupo">
+        <label>OP</label>
+        <input id="editar-op" type="text" placeholder="Número da OP"/>
+      </div>
+      <div class="campo-grupo">
+        <label>Nova Qtde</label>
+        <input id="editar-qtde" type="number" placeholder="Quantidade"/>
+      </div>
+      <div class="campo-grupo">
+        <label>Nova Descrição</label>
+        <input id="editar-desc" type="text" placeholder="Descrição do produto"/>
+      </div>
+      <button class="btn-primary" onclick="editarOP()">✏️ SALVAR ALTERAÇÕES</button>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════ STATUS ═══════════════════ -->
+<!-- ═══════════ STATUS ═══════════ -->
 <div id="tela-status" class="tela">
   <header class="app-header">
     <button class="btn-back" onclick="irPara('tela-main')">← Voltar</button>
@@ -154,7 +151,7 @@
   </div>
 </div>
 
-<!-- ═══════════════════ MODAL REJEITAR ═══════════════════ -->
+<!-- ═══════════ MODAL REJEITAR ═══════════ -->
 <div id="modal-rejeitar" class="modal-overlay hidden" onclick="fecharModalRejeitar()">
   <div class="modal-box" onclick="event.stopPropagation()">
     <div class="modal-titulo">↩️ Rejeitar OP</div>
@@ -168,25 +165,32 @@
     </div>
     <div class="modal-btns">
       <button class="btn-outline" onclick="fecharModalRejeitar()">Cancelar</button>
-      <button class="btn-rejeitar-confirm" onclick="confirmarRejeicao()">Confirmar Rejeição</button>
+      <button class="btn-rejeitar-confirm" onclick="confirmarRejeicao()">Confirmar</button>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════ MODAL HISTÓRICO ═══════════════════ -->
+<!-- ═══════════ MODAL HISTÓRICO ═══════════ -->
 <div id="modal-historico" class="modal-overlay hidden" onclick="fecharModalHistorico()">
   <div class="modal-box modal-hist-box" onclick="event.stopPropagation()">
-    <div class="modal-titulo" id="modal-hist-op"></div>
+    <div class="modal-hist-header">
+      <div class="modal-titulo" id="modal-hist-op"></div>
+      <div id="modal-hist-produto" class="modal-hist-produto"></div>
+    </div>
+    <!-- Foto do produto no histórico -->
+    <div id="modal-hist-foto-wrap" class="modal-hist-foto-wrap hidden">
+      <img id="modal-hist-foto" src="" alt="Produto" class="modal-hist-foto"/>
+    </div>
     <div id="modal-hist-body" class="hist-body"></div>
     <button class="btn-primary" onclick="fecharModalHistorico()">Fechar</button>
   </div>
 </div>
 
-<!-- ═══════════════════ MODAL GENÉRICO ═══════════════════ -->
+<!-- ═══════════ MODAL GENÉRICO ═══════════ -->
 <div id="modal-overlay" class="modal-overlay hidden" onclick="fecharModal()">
   <div class="modal-box" onclick="event.stopPropagation()">
     <div id="modal-icon" class="modal-icon"></div>
-    <div id="modal-msg"  class="modal-msg"></div>
+    <div id="modal-msg" class="modal-msg"></div>
     <button class="btn-primary" onclick="fecharModal()">OK</button>
   </div>
 </div>
