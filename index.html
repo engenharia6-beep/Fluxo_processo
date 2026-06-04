@@ -58,44 +58,50 @@
   <div id="secao-pcp" class="secao hidden">
     <div class="secao-titulo">🚀 Lançar OP para Estoque</div>
 
+    <!-- QR Code -->
     <div class="campo-grupo">
-      <label>QR Code</label>
+      <label>QR Code <span class="label-hint">(ou selecione da lista)</span></label>
       <div class="qr-row">
-        <input id="pcp-qr" type="text" placeholder="Bipe ou use a câmera"
+        <input id="pcp-qr" type="text" placeholder="Bipe para localizar a OP"
           onchange="processarQRPCP(this.value)"/>
         <button class="btn-camera" onclick="abrirCamera()">📷</button>
       </div>
     </div>
 
-    <div class="campo-grid">
-      <div class="campo-grupo">
-        <label>OP *</label>
-        <input id="pcp-op" type="text" placeholder="Ex: 3762"/>
+    <!-- Lista de Pendências -->
+    <div class="ops-header">
+      <span class="ops-titulo">OPs aguardando lançamento</span>
+      <button class="btn-refresh-sm" onclick="carregarPendencias()">↺ Atualizar</button>
+    </div>
+    <div id="pcp-pendencias" class="ops-lista"></div>
+
+    <!-- Preview da OP selecionada -->
+    <div id="pcp-preview" class="pcp-preview hidden">
+      <div class="pcp-preview-info">
+        <div class="pcp-preview-header">
+          <div>
+            <div class="pcp-preview-op" id="pcp-preview-op"></div>
+            <div class="pcp-preview-cliente" id="pcp-preview-cliente"></div>
+            <div class="pcp-preview-cod" id="pcp-preview-cod"></div>
+            <div class="pcp-preview-desc" id="pcp-preview-desc"></div>
+            <div class="pcp-preview-qtde" id="pcp-preview-qtde"></div>
+          </div>
+          <div id="pcp-foto-wrap" class="pcp-foto-wrap">
+            <img id="pcp-foto" src="" alt="Foto do produto" class="pcp-foto hidden"/>
+            <div id="pcp-foto-loading" class="pcp-foto-loading hidden">⏳</div>
+          </div>
+        </div>
       </div>
+
       <div class="campo-grupo">
-        <label>Qtde</label>
-        <input id="pcp-qtde" type="number" placeholder="0"/>
+        <label>OBS</label>
+        <input id="pcp-obs" type="text" placeholder="Observação (opcional)"/>
       </div>
-    </div>
 
-    <div class="campo-grupo">
-      <label>Código</label>
-      <input id="pcp-cod" type="text" placeholder="Código do produto"/>
+      <button class="btn-primary btn-lancar" onclick="lancarOP()">
+        🚀 LANÇAR PARA ESTOQUE
+      </button>
     </div>
-
-    <div class="campo-grupo">
-      <label>Descrição</label>
-      <div id="pcp-descricao" class="campo-readonly">—</div>
-    </div>
-
-    <div class="campo-grupo">
-      <label>OBS</label>
-      <input id="pcp-obs" type="text" placeholder="Observação (opcional)"/>
-    </div>
-
-    <button class="btn-primary btn-lancar" onclick="lancarOP()">
-      🚀 LANÇAR PARA ESTOQUE
-    </button>
   </div>
 
   <!-- ══════ SEÇÃO SETOR ══════ -->
