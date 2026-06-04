@@ -85,7 +85,10 @@
     <div id="pcp-tab-fluxo" class="pcp-tab-content">
       <div class="ops-header">
         <span class="ops-titulo">Todas as OPs em aberto</span>
-        <button class="btn-refresh-sm" onclick="carregarStatusAdmin()">↺</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn-refresh-sm" onclick="sincronizarStatus()">🔄 Sync</button>
+          <button class="btn-refresh-sm" onclick="carregarStatusAdmin()">↺</button>
+        </div>
       </div>
       <div class="busca-wrap" style="margin-bottom:8px">
         <input id="pcp-busca" type="text" placeholder="Buscar OP, código, setor..." oninput="filtrarStatusAdmin()"/>
