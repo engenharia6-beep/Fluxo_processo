@@ -1,208 +1,665 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <title>Fluxo Produtivo</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="app.css"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Fluxo Produtivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0f1117;
+    --surface:   #1a1d27;
+    --surface2:  #22263a;
+    --border:    #2e3347;
+    --accent:    #00d4ff;
+    --accent2:   #ff6b35;
+    --danger:    #ff3b5c;
+    --success:   #00e676;
+    --warning:   #ffb300;
+    --text:      #e8eaf6;
+    --text2:     #8892b0;
+    --mono:      'IBM Plex Mono', monospace;
+    --sans:      'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── TELA ── */
+  .tela { display: none; min-height: 100vh; flex-direction: column; }
+  .tela.ativa { display: flex; }
+
+  /* ── HEADER ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  .header-user {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .header-setor {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 3px;
+    background: var(--accent);
+    color: var(--bg);
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .btn-sair {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text2);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: var(--mono);
+  }
+  .btn-sair:hover { border-color: var(--danger); color: var(--danger); }
+
+  /* ── LOGIN ── */
+  #tela-login {
+    background: var(--bg);
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+  }
+  .login-box {
+    width: 100%;
+    max-width: 400px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 40px 32px;
+  }
+  .login-logo {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 4px;
+    color: var(--text2);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .login-titulo {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 32px;
+    line-height: 1.2;
+  }
+  .login-titulo span { color: var(--accent); }
+
+  .campo-grupo { margin-bottom: 20px; }
+  .campo-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .campo-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 16px;
+    font-size: 16px;
+    color: var(--text);
+    font-family: var(--sans);
+    outline: none;
+    transition: border-color .2s;
+  }
+  .campo-input:focus { border-color: var(--accent); }
+
+  /* Select customizado */
+  .select-lista {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .select-item {
+    padding: 12px 16px;
+    cursor: pointer;
+    font-size: 15px;
+    border-bottom: 1px solid var(--border);
+    transition: background .15s;
+  }
+  .select-item:last-child { border-bottom: none; }
+  .select-item:hover, .select-item.selecionado { background: var(--surface); color: var(--accent); }
+
+  .btn-primario {
+    width: 100%;
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 4px;
+    padding: 16px;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: var(--mono);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: opacity .2s;
+  }
+  .btn-primario:hover { opacity: .85; }
+  .btn-primario:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── TELA PRINCIPAL ── */
+  #tela-principal { background: var(--bg); }
+
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    padding: 14px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .toolbar-filtro {
+    flex: 1;
+    min-width: 160px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: var(--text);
+    font-family: var(--sans);
+    outline: none;
+  }
+  .toolbar-filtro:focus { border-color: var(--accent); }
+  .toolbar-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: var(--mono);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .2s;
+  }
+  .toolbar-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .toolbar-btn.ativo { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 700; }
+
+  .contador {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text2);
+    padding: 10px 0;
+    white-space: nowrap;
+  }
+  .contador span { color: var(--accent); font-weight: 700; }
+
+  /* ── LISTA DE OPs ── */
+  .ops-lista {
+    flex: 1;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .op-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 18px;
+    cursor: pointer;
+    transition: border-color .2s, transform .1s;
+    position: relative;
+    overflow: hidden;
+  }
+  .op-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent);
+  }
+  .op-card:hover { border-color: var(--accent); transform: translateX(2px); }
+  .op-card.selecionado { border-color: var(--accent); background: var(--surface2); }
+  .op-card.selecionado::before { width: 4px; }
+
+  .op-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+  .op-numero {
+    font-family: var(--mono);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 1px;
+  }
+  .op-pedido {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+    background: var(--surface2);
+    padding: 3px 8px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+  .op-codigo {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--warning);
+    margin-bottom: 4px;
+  }
+  .op-desc {
+    font-size: 13px;
+    color: var(--text2);
+    margin-bottom: 10px;
+    line-height: 1.4;
+  }
+  .op-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .op-qtde {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .op-qtde span { color: var(--text2); font-size: 11px; }
+  .op-setor-atual {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    background: var(--surface2);
+    color: var(--text2);
+    border: 1px solid var(--border);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text2);
+  }
+  .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
+  .empty-state-txt { font-family: var(--mono); font-size: 13px; letter-spacing: 1px; }
+
+  /* ── BOTTOM BAR ── */
+  .bottom-bar {
+    position: sticky;
+    bottom: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    gap: 10px;
+  }
+  .btn-receber {
+    flex: 2;
+    background: var(--success);
+    color: var(--bg);
+    border: none;
+    border-radius: 4px;
+    padding: 16px;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: var(--mono);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: opacity .2s;
+  }
+  .btn-receber:disabled { opacity: .3; cursor: not-allowed; }
+  .btn-receber:not(:disabled):hover { opacity: .85; }
+
+  .btn-rejeitar {
+    flex: 1;
+    background: none;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    border-radius: 4px;
+    padding: 16px;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: var(--mono);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .btn-rejeitar:disabled { opacity: .3; cursor: not-allowed; }
+  .btn-rejeitar:not(:disabled):hover { background: var(--danger); color: var(--bg); }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.7);
+    z-index: 200;
+    justify-content: center;
+    align-items: flex-end;
+  }
+  .modal-overlay.ativo { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px 12px 0 0;
+    padding: 28px 24px 32px;
+    width: 100%;
+    max-width: 520px;
+    animation: slideUp .25s ease;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+  .modal-titulo {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--text2);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .modal-op {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 20px;
+  }
+  .modal-op span { color: var(--accent); font-family: var(--mono); }
+  .modal-info {
+    background: var(--surface2);
+    border-radius: 4px;
+    padding: 14px;
+    margin-bottom: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .modal-info-item label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text2);
+    letter-spacing: 1px;
+    display: block;
+    margin-bottom: 3px;
+    text-transform: uppercase;
+  }
+  .modal-info-item span {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .modal-obs {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px 14px;
+    font-size: 14px;
+    color: var(--text);
+    font-family: var(--sans);
+    resize: none;
+    outline: none;
+    margin-bottom: 20px;
+    min-height: 70px;
+  }
+  .modal-obs:focus { border-color: var(--accent); }
+  .modal-obs::placeholder { color: var(--text2); }
+
+  .modal-btns { display: flex; gap: 10px; }
+  .modal-btns .btn-receber { font-size: 14px; padding: 14px; }
+  .btn-cancelar {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text2);
+    border-radius: 4px;
+    padding: 14px 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .btn-cancelar:hover { border-color: var(--text2); }
+
+  /* Rejeitar — opções de destino */
+  .rejeitar-opcoes {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .rejeitar-op-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+    transition: all .2s;
+  }
+  .rejeitar-op-btn:hover, .rejeitar-op-btn.selecionado {
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+
+  /* ── LOADING ── */
+  .loading {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15,17,23,.85);
+    z-index: 300;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .loading.ativo { display: flex; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-txt {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text2);
+    letter-spacing: 2px;
+  }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 20px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    opacity: 0;
+    transition: all .3s;
+    z-index: 400;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .toast.sucesso { border-color: var(--success); color: var(--success); }
+  .toast.erro { border-color: var(--danger); color: var(--danger); }
+  .toast.visivel { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  @media (min-width: 600px) {
+    .modal-overlay { align-items: center; }
+    .modal { border-radius: 12px; margin: 20px; }
+    .ops-lista { padding: 20px; gap: 12px; }
+  }
+</style>
 </head>
 <body>
 
-<!-- ═══════════ LOGIN ═══════════ -->
-<div id="tela-login" class="tela ativa">
-  <div class="login-bg"><div class="login-grid"></div></div>
-  <div class="login-card">
-    <div class="login-logo">
-      <div class="logo-icon">⚙</div>
-      <h1>Fluxo<br/><span>Produtivo</span></h1>
-    </div>
-    <div class="form-group">
-      <label>Operador</label>
-      <input id="login-operador" type="text" placeholder="Digite seu nome"
-        onkeydown="if(event.key==='Enter') document.getElementById('login-pin').focus()"/>
-    </div>
-    <div class="form-group">
-      <label>PIN</label>
-      <div class="pin-wrap">
-        <input id="login-pin" type="password" inputmode="numeric" maxlength="6" placeholder="••••"
-          onkeydown="if(event.key==='Enter') fazerLogin()"/>
-        <button class="pin-toggle" onclick="togglePin()">👁</button>
-      </div>
-    </div>
-    <button class="btn-primary" onclick="fazerLogin()">ENTRAR</button>
-    <div id="login-erro" class="msg-erro"></div>
-  </div>
+<!-- LOADING -->
+<div class="loading" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-txt" id="loading-txt">CARREGANDO...</div>
 </div>
 
-<!-- ═══════════ MAIN (SETOR) ═══════════ -->
-<div id="tela-main" class="tela">
-  <header class="app-header">
-    <div class="header-info">
-      <span id="header-nome" class="header-nome"></span>
-      <span id="header-setor" class="setor-badge"></span>
-    </div>
-    <div class="header-actions">
-      <button class="btn-icon" onclick="irPara('tela-status')" title="Ver Fluxo">📋</button>
-      <button class="btn-icon" onclick="fazerLogout()" title="Sair">🚪</button>
-    </div>
-  </header>
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
 
-  <div id="camera-container" class="camera-container hidden">
-    <video id="camera-video" autoplay playsinline></video>
-    <div class="camera-overlay"><div class="camera-frame"></div></div>
-    <button class="btn-fechar-camera" onclick="fecharCamera()">✕ Fechar câmera</button>
-  </div>
+<!-- ═══════════════════════════════════════ -->
+<!-- TELA LOGIN -->
+<!-- ═══════════════════════════════════════ -->
+<div class="tela ativa" id="tela-login">
+  <div class="login-box">
+    <div class="login-logo">Sistema de Produção</div>
+    <h1 class="login-titulo">Fluxo<br><span>Produtivo</span></h1>
 
-  <!-- SEÇÃO SETOR NORMAL -->
-  <div id="secao-setor" class="secao hidden">
-    <div class="ops-header">
-      <span class="ops-titulo">OPs em <strong id="setor-recebeDE"></strong></span>
-      <button class="btn-refresh-sm" onclick="carregarOPsDisponiveis()">↺</button>
-    </div>
-    <input id="busca-setor" type="text" class="busca-campo"
-      placeholder="Buscar por OP, código ou descrição..."
-      oninput="filtrarOPs(this.value)"
-      onchange="tentarQR(this.value)"/>
-    <div id="ops-lista" class="ops-lista"></div>
-    <div class="acoes-row">
-      <button id="btn-receber" class="btn-receber" onclick="receberOP()" disabled>✅ RECEBER</button>
-      <button id="btn-rejeitar" class="btn-rejeitar hidden" onclick="abrirModalRejeitar()" disabled>↩️ REJEITAR</button>
-    </div>
-  </div>
-
-  <!-- SEÇÃO PCP ADMIN -->
-  <div id="secao-pcp" class="secao hidden">
-    <!-- Tabs -->
-    <div class="pcp-tabs">
-      <button class="pcp-tab ativo" onclick="pcpTab('fluxo')">📋 Fluxo Geral</button>
-      <button class="pcp-tab" onclick="pcpTab('mover')">🔀 Mover OP</button>
-      <button class="pcp-tab" onclick="pcpTab('editar')">✏️ Editar OP</button>
-    </div>
-
-    <!-- TAB: Fluxo Geral -->
-    <div id="pcp-tab-fluxo" class="pcp-tab-content">
-      <div class="ops-header">
-        <span class="ops-titulo">Todas as OPs em aberto</span>
-        <div style="display:flex;gap:6px">
-          <button class="btn-refresh-sm" onclick="sincronizarStatus()">🔄 Sync</button>
-          <button class="btn-refresh-sm" onclick="carregarStatusAdmin()">↺</button>
-        </div>
-      </div>
-      <div class="busca-wrap" style="margin-bottom:8px">
-        <input id="pcp-busca" type="text" placeholder="Buscar OP, código, setor..." oninput="filtrarStatusAdmin()"/>
-      </div>
-      <div id="pcp-status-lista" class="status-lista"></div>
-    </div>
-
-    <!-- TAB: Mover OP -->
-    <div id="pcp-tab-mover" class="pcp-tab-content hidden">
-      <div class="campo-grupo">
-        <label>OP</label>
-        <input id="mover-op" type="text" placeholder="Número da OP"/>
-      </div>
-      <div class="campo-grupo">
-        <label>Nova Custódia</label>
-        <select id="mover-custodia">
-          <option value="">Selecione o setor</option>
-          <option>ESTOQUE</option>
-          <option>PRODUÇÃO</option>
-          <option>QUALIDADE</option>
-          <option>CONSOLIDAÇÃO</option>
-          <option>EXPEDIDO</option>
-          <option>PA</option>
-          <option>RESERVA</option>
-        </select>
-      </div>
-      <div class="campo-grupo">
-        <label>Motivo *</label>
-        <input id="mover-motivo" type="text" placeholder="Motivo do ajuste"/>
-      </div>
-      <button class="btn-primary" onclick="moverOP()">🔀 MOVER OP</button>
-    </div>
-
-    <!-- TAB: Editar OP -->
-    <div id="pcp-tab-editar" class="pcp-tab-content hidden">
-      <div class="campo-grupo">
-        <label>OP</label>
-        <input id="editar-op" type="text" placeholder="Número da OP"/>
-      </div>
-      <div class="campo-grupo">
-        <label>Nova Qtde</label>
-        <input id="editar-qtde" type="number" placeholder="Quantidade"/>
-      </div>
-      <div class="campo-grupo">
-        <label>Nova Descrição</label>
-        <input id="editar-desc" type="text" placeholder="Descrição do produto"/>
-      </div>
-      <button class="btn-primary" onclick="editarOP()">✏️ SALVAR ALTERAÇÕES</button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════ STATUS ═══════════ -->
-<div id="tela-status" class="tela">
-  <header class="app-header">
-    <button class="btn-back" onclick="irPara('tela-main')">← Voltar</button>
-    <span class="header-title">Fluxo de Processo</span>
-    <button class="btn-icon" onclick="carregarStatus()">↺</button>
-  </header>
-  <div class="status-body">
-    <div class="busca-wrap">
-      <input id="busca-op" type="text" placeholder="Buscar OP, código, setor..." oninput="filtrarStatus()"/>
-    </div>
-    <div id="status-lista" class="status-lista"></div>
-  </div>
-</div>
-
-<!-- ═══════════ MODAL REJEITAR ═══════════ -->
-<div id="modal-rejeitar" class="modal-overlay hidden" onclick="fecharModalRejeitar()">
-  <div class="modal-box" onclick="event.stopPropagation()">
-    <div class="modal-titulo">↩️ Rejeitar OP</div>
     <div class="campo-grupo">
-      <label>Enviar para</label>
-      <select id="rejeitar-destino"></select>
+      <label class="campo-label">Operador</label>
+      <div class="select-lista" id="lista-operadores">
+        <div class="select-item" style="color:var(--text2)">Carregando...</div>
+      </div>
     </div>
+
     <div class="campo-grupo">
-      <label>Motivo *</label>
-      <input id="rejeitar-motivo" type="text" placeholder="Descreva o motivo..."/>
+      <label class="campo-label" for="campo-pin">PIN</label>
+      <input class="campo-input" type="password" id="campo-pin" placeholder="••••" maxlength="6" inputmode="numeric">
     </div>
+
+    <button class="btn-primario" id="btn-login" disabled>ENTRAR</button>
+    <div id="login-erro" style="color:var(--danger);font-size:13px;text-align:center;margin-top:12px;font-family:var(--mono);display:none"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- TELA PRINCIPAL -->
+<!-- ═══════════════════════════════════════ -->
+<div class="tela" id="tela-principal">
+  <div class="header">
+    <div class="header-logo">FLUXO</div>
+    <div class="header-user">
+      <div class="header-setor" id="hd-setor">—</div>
+      <div style="font-size:13px;color:var(--text2)" id="hd-nome">—</div>
+      <button class="btn-sair" id="btn-sair">SAIR</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <input class="toolbar-filtro" type="text" id="filtro-pedido" placeholder="Filtrar por pedido..." inputmode="numeric">
+    <button class="toolbar-btn" id="btn-limpar-filtro">LIMPAR</button>
+    <button class="toolbar-btn" id="btn-atualizar">↻ ATUALIZAR</button>
+    <div class="contador">OPs disponíveis: <span id="contador-ops">0</span></div>
+  </div>
+
+  <div class="ops-lista" id="ops-lista">
+    <div class="empty-state">
+      <div class="empty-state-icon">📋</div>
+      <div class="empty-state-txt">NENHUMA OP DISPONÍVEL</div>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <button class="btn-receber" id="btn-receber" disabled>✓ RECEBER</button>
+    <button class="btn-rejeitar" id="btn-rejeitar" disabled>✕ REJEITAR</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- MODAL RECEBER -->
+<!-- ═══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-receber">
+  <div class="modal">
+    <div class="modal-titulo">Confirmar Recebimento</div>
+    <div class="modal-op">OP <span id="mr-op">—</span></div>
+    <div class="modal-info">
+      <div class="modal-info-item">
+        <label>Código</label>
+        <span id="mr-codigo">—</span>
+      </div>
+      <div class="modal-info-item">
+        <label>Qtde</label>
+        <span id="mr-qtde">—</span>
+      </div>
+      <div class="modal-info-item">
+        <label>Pedido</label>
+        <span id="mr-pedido">—</span>
+      </div>
+      <div class="modal-info-item">
+        <label>Cliente</label>
+        <span id="mr-cliente">—</span>
+      </div>
+    </div>
+    <textarea class="modal-obs" id="mr-obs" placeholder="Observação (opcional)..."></textarea>
     <div class="modal-btns">
-      <button class="btn-outline" onclick="fecharModalRejeitar()">Cancelar</button>
-      <button class="btn-rejeitar-confirm" onclick="confirmarRejeicao()">Confirmar</button>
+      <button class="btn-cancelar" id="mr-cancelar">CANCELAR</button>
+      <button class="btn-receber" id="mr-confirmar">✓ CONFIRMAR</button>
     </div>
   </div>
 </div>
 
-<!-- ═══════════ MODAL HISTÓRICO ═══════════ -->
-<div id="modal-historico" class="modal-overlay hidden" onclick="fecharModalHistorico()">
-  <div class="modal-box modal-hist-box" onclick="event.stopPropagation()">
-    <div class="modal-hist-header">
-      <div class="modal-titulo" id="modal-hist-op"></div>
-      <div id="modal-hist-produto" class="modal-hist-produto"></div>
+<!-- ═══════════════════════════════════════ -->
+<!-- MODAL REJEITAR -->
+<!-- ═══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-rejeitar">
+  <div class="modal">
+    <div class="modal-titulo">Rejeitar OP</div>
+    <div class="modal-op">OP <span id="mj-op">—</span></div>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">Devolver para:</div>
+    <div class="rejeitar-opcoes" id="mj-destinos"></div>
+    <textarea class="modal-obs" id="mj-obs" placeholder="Motivo da rejeição..."></textarea>
+    <div class="modal-btns">
+      <button class="btn-cancelar" id="mj-cancelar">CANCELAR</button>
+      <button class="btn-rejeitar" style="flex:2;padding:14px" id="mj-confirmar">✕ CONFIRMAR</button>
     </div>
-    <!-- Foto do produto no histórico -->
-    <div id="modal-hist-foto-wrap" class="modal-hist-foto-wrap hidden">
-      <img id="modal-hist-foto" src="" alt="Produto" class="modal-hist-foto"/>
-    </div>
-    <div id="modal-hist-body" class="hist-body"></div>
-    <button class="btn-primary" onclick="fecharModalHistorico()">Fechar</button>
   </div>
-</div>
-
-<!-- ═══════════ MODAL GENÉRICO ═══════════ -->
-<div id="modal-overlay" class="modal-overlay hidden" onclick="fecharModal()">
-  <div class="modal-box" onclick="event.stopPropagation()">
-    <div id="modal-icon" class="modal-icon"></div>
-    <div id="modal-msg" class="modal-msg"></div>
-    <button class="btn-primary" onclick="fecharModal()">OK</button>
-  </div>
-</div>
-
-<!-- Loading -->
-<div id="loading" class="loading-overlay hidden">
-  <div class="loading-spinner"></div>
 </div>
 
 <script src="app.js"></script>
