@@ -3,17 +3,20 @@
 // ============================================================
 const API = 'https://script.google.com/macros/s/AKfycbwrZjdIKTpNdneierfTXhDosahkXsnIN8oNun-cPV8adVekAAQddRR3LMpeH1Q1je5zGQ/exec';
 
-// Ordem dos setores — define quem pode rejeitar para quem
-const SETORES = [
-  { seq: 1, nome: '1-PCP' },
-  { seq: 2, nome: '2-ESTOQUE' },
-  { seq: 3, nome: '3-PRODUÇÃO' },
-  { seq: 4, nome: '4-QUALIDADE' },
-  { seq: 5, nome: '5-CONSOLIDAÇÃO' },
-  { seq: 6, nome: '6-EXPEDIDO' },
-  { seq: 7, nome: '7-P.A' },
-  { seq: 8, nome: '8-RESERVA' },
+// Setores que operam no app
+// seqVe = Seq que este setor vê | seqGrava = Seq que grava ao confirmar
+const SETORES_APP = [
+  { nome: 'PRODUÇÃO',     seqVe: 1, seqGrava: 2 },
+  { nome: 'QUALIDADE',    seqVe: 2, seqGrava: 3 },
+  { nome: 'CONSOLIDAÇÃO', seqVe: 3, seqGrava: 4 },
+  { nome: 'EXPEDIDO',     seqVe: 4, seqGrava: 5 },
+  { nome: 'P.A',          seqVe: 5, seqGrava: 6 },
 ];
+
+function getConfigSetor(setor) {
+  const nome = String(setor).trim().toUpperCase().replace(/^\d+-/, '');
+  return SETORES_APP.find(s => s.nome.toUpperCase() === nome) || null;
+}
 
 // ============================================================
 // ESTADO
@@ -58,10 +61,7 @@ async function api(params, body = null) {
   return r.json();
 }
 
-function getSeq(setor) {
-  const s = SETORES.find(x => x.nome === setor || x.nome.split('-')[1] === setor);
-  return s ? s.seq : 0;
-}
+
 
 // ============================================================
 // LOGIN
@@ -214,7 +214,8 @@ function selecionarOP(opNum) {
 function atualizarBotoes() {
   const temSelecionada = !!estado.opSelecionada;
   $('btn-receber').disabled  = !temSelecionada;
-  $('btn-rejeitar').disabled = !temSelecionada || getSeq(estado.operador.setor) <= 2;
+  const cfg = getConfigSetor(estado.operador.setor);
+  $('btn-rejeitar').disabled = !temSelecionada || !cfg || cfg.seqGrava <= 2;
 }
 
 // ============================================================
@@ -281,8 +282,8 @@ function abrirModalRejeitar() {
   estado.setorDestino    = null;
 
   // Montar destinos possíveis (setores anteriores ao atual)
-  const seqAtual = getSeq(estado.operador.setor);
-  const destinos = SETORES.filter(s => s.seq < seqAtual && s.seq > 1);
+  const cfgAtual = getConfigSetor(estado.operador.setor);
+  const destinos = cfgAtual ? SETORES_APP.filter(s => s.seqGrava < cfgAtual.seqGrava) : [];
 
   $('mj-destinos').innerHTML = destinos.map(s => `
     <button class="rejeitar-op-btn" onclick="selecionarDestino('${s.nome}', this)">
