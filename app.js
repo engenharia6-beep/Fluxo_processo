@@ -122,54 +122,150 @@ async function iniciarTelaMain() {
 }
 
 // ─── PCP ──────────────────────────────────────────────────
+let pendencias    = [];   // cache da lista de pendências
+let pcpSelecionada = null; // OP selecionada no PCP
+
 function mostrarSecaoPCP() {
   document.getElementById('secao-pcp').classList.remove('hidden');
   document.getElementById('secao-setor').classList.add('hidden');
-  limparFormPCP();
+  carregarPendencias();
 }
 
-function limparFormPCP() {
-  document.getElementById('pcp-qr').value   = '';
-  document.getElementById('pcp-op').value   = '';
-  document.getElementById('pcp-cod').value  = '';
-  document.getElementById('pcp-qtde').value = '';
-  document.getElementById('pcp-obs').value  = '';
-  document.getElementById('pcp-descricao').textContent = '';
+async function carregarPendencias() {
+  const lista = document.getElementById('pcp-pendencias');
+  lista.innerHTML = '<div class="ops-loading">Carregando pendências...</div>';
+  pcpSelecionada = null;
+  esconderPreviewPCP();
+
+  try {
+    pendencias = await apiGet('getPendencias');
+    renderizarPendencias(pendencias);
+  } catch (e) {
+    lista.innerHTML = '<div class="ops-loading">Erro ao carregar pendências.</div>';
+  }
+}
+
+function renderizarPendencias(ops) {
+  const lista = document.getElementById('pcp-pendencias');
+  if (!ops || ops.length === 0) {
+    lista.innerHTML = `
+      <div class="ops-vazia">
+        <div class="ops-vazia-icon">✅</div>
+        <div>Todas as OPs já foram lançadas!</div>
+      </div>`;
+    return;
+  }
+  lista.innerHTML = ops.map(op => `
+    <div class="op-item" onclick="selecionarPendencia('${op.op}')" id="pcp-op-${op.op}">
+      <div class="op-item-header">
+        <span class="op-item-num">OP ${op.op}</span>
+        <span class="op-item-qtde">Qtde: ${op.qtde || '—'}</span>
+      </div>
+      <div class="op-item-cod">${op.codigo || ''}</div>
+      <div class="op-item-desc">${op.descricao || ''}</div>
+      <div class="op-item-custodia">🏢 ${op.cliente || ''} · 📅 ${op.data || ''}</div>
+    </div>`
+  ).join('');
+}
+
+async function selecionarPendencia(opNum) {
+  pcpSelecionada = pendencias.find(p => p.op.toString() === opNum.toString());
+  if (!pcpSelecionada) return;
+
+  // Destaca na lista
+  document.querySelectorAll('.op-item').forEach(el => el.classList.remove('selecionada'));
+  document.getElementById('pcp-op-' + opNum)?.classList.add('selecionada');
+
+  // Preenche preview
+  document.getElementById('pcp-preview-op').textContent     = 'OP ' + pcpSelecionada.op;
+  document.getElementById('pcp-preview-cliente').textContent = pcpSelecionada.cliente;
+  document.getElementById('pcp-preview-cod').textContent     = pcpSelecionada.codigo;
+  document.getElementById('pcp-preview-desc').textContent    = pcpSelecionada.descricao;
+  document.getElementById('pcp-preview-qtde').textContent    = 'Qtde: ' + pcpSelecionada.qtde;
+
+  // Mostra preview
+  document.getElementById('pcp-preview').classList.remove('hidden');
+
+  // Carrega foto
+  if (pcpSelecionada.codigo) {
+    carregarFotoProduto(pcpSelecionada.codigo);
+  }
+}
+
+async function carregarFotoProduto(codigo) {
+  const img     = document.getElementById('pcp-foto');
+  const loading = document.getElementById('pcp-foto-loading');
+
+  img.classList.add('hidden');
+  loading.classList.remove('hidden');
+
+  try {
+    const prod = await apiGet('getCadastroProduto', { codigo });
+    if (prod.foto) {
+      img.src = prod.foto;
+      img.onload  = () => { loading.classList.add('hidden'); img.classList.remove('hidden'); };
+      img.onerror = () => { loading.classList.add('hidden'); };
+      // Atualiza descrição se veio do cadastro e estava vazia
+      if (prod.descricao && !pcpSelecionada.descricao) {
+        document.getElementById('pcp-preview-desc').textContent = prod.descricao;
+      }
+    } else {
+      loading.classList.add('hidden');
+    }
+  } catch (e) {
+    loading.classList.add('hidden');
+  }
+}
+
+function esconderPreviewPCP() {
+  document.getElementById('pcp-preview').classList.add('hidden');
+  document.getElementById('pcp-foto').classList.add('hidden');
+  document.getElementById('pcp-foto').src = '';
+  document.getElementById('pcp-obs').value = '';
+  pcpSelecionada = null;
 }
 
 async function processarQRPCP(raw) {
   raw = (raw || '').trim();
   if (!raw) return;
-  const partes = raw.split('@');
-  document.getElementById('pcp-op').value   = partes[0]  || '';
-  document.getElementById('pcp-cod').value  = partes[1]  || '';
-  document.getElementById('pcp-qtde').value = partes[2]  || '';
-  document.getElementById('pcp-descricao').textContent = '...';
   fecharCamera();
+
+  // Extrai OP do QR (formato: OP@Codigo@Qtde)
+  const partes = raw.split('@');
+  const op     = partes[0];
+
+  // Tenta encontrar na lista de pendências
+  const encontrada = pendencias.find(p => p.op.toString() === op.toString());
+  if (encontrada) {
+    selecionarPendencia(op);
+    mostrarToast('✅ OP ' + op + ' localizada!');
+  } else {
+    mostrarToast('⚠️ OP ' + op + ' não encontrada nas pendências.', true);
+  }
 }
 
 async function lancarOP() {
-  const op     = document.getElementById('pcp-op').value.trim();
-  const codigo = document.getElementById('pcp-cod').value.trim();
-  const qtde   = document.getElementById('pcp-qtde').value.trim();
-  const obs    = document.getElementById('pcp-obs').value.trim();
-  const qrcode = document.getElementById('pcp-qr').value.trim();
+  if (!pcpSelecionada) { mostrarModal('⚠️', 'Selecione uma OP primeiro.'); return; }
 
-  if (!op) { mostrarModal('⚠️', 'Informe a OP.'); return; }
+  const obs = document.getElementById('pcp-obs').value.trim();
 
   mostrarLoading(true);
   try {
     const resp = await apiPost({
-      action: 'lancarOP',
+      action:       'lancarOP',
       operadorNome: operadorLogado.nome,
-      op, codigo, qtde, obs, qrcode
+      op:           pcpSelecionada.op,
+      codigo:       pcpSelecionada.codigo,
+      qtde:         pcpSelecionada.qtde,
+      obs,
+      qrcode:       document.getElementById('pcp-qr')?.value || ''
     });
     mostrarModal('✅',
       `OP ${resp.op} lançada!\n` +
-      `${resp.descricao ? resp.descricao + '\n' : ''}` +
+      `${pcpSelecionada.descricao}\n` +
       `Custódia: ${resp.custodia}`
     );
-    limparFormPCP();
+    await carregarPendencias();
   } catch (e) {
     mostrarModal('❌', e.message);
   } finally {
