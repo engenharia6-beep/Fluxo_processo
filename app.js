@@ -1,648 +1,383 @@
 // ============================================================
-//  FLUXO PRODUTIVO — app.js v3.0
+// CONFIGURAÇÃO
 // ============================================================
+const API = 'https://script.google.com/macros/s/AKfycbwrZjdIKTpNdneierfTXhDosahkXsnIN8oNun-cPV8adVekAAQddRR3LMpeH1Q1je5zGQ/exec';
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbwrZjdIKTpNdneierfTXhDosahkXsnIN8oNun-cPV8adVekAAQddRR3LMpeH1Q1je5zGQ/exec';
-
-// ─── Estado ───────────────────────────────────────────────
-let operadorLogado  = null;
-let opsDisponiveis  = [];
-let opSelecionada   = null;
-let streamCamera    = null;
-let jsQRLoaded      = false;
-let statusData      = [];
-let statusAdminData = [];
-
-// ============================================================
-//  INIT
-// ============================================================
-window.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('setor-qr')?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') processarQR(e.target.value);
-  });
-});
+// Ordem dos setores — define quem pode rejeitar para quem
+const SETORES = [
+  { seq: 1, nome: '1-PCP' },
+  { seq: 2, nome: '2-ESTOQUE' },
+  { seq: 3, nome: '3-PRODUÇÃO' },
+  { seq: 4, nome: '4-QUALIDADE' },
+  { seq: 5, nome: '5-CONSOLIDAÇÃO' },
+  { seq: 6, nome: '6-EXPEDIDO' },
+  { seq: 7, nome: '7-P.A' },
+  { seq: 8, nome: '8-RESERVA' },
+];
 
 // ============================================================
-//  NAVEGAÇÃO
+// ESTADO
 // ============================================================
-function irPara(telaId) {
-  document.querySelectorAll('.tela').forEach(t => {
-    t.classList.remove('ativa'); t.style.display = 'none';
-  });
-  const alvo = document.getElementById(telaId);
-  alvo.style.display = 'flex';
-  alvo.classList.add('ativa');
+let estado = {
+  operador:    null,   // { id, nome, setor }
+  ops:         [],     // lista completa de OPs disponíveis
+  opsFiltradas:[],     // lista após filtro
+  opSelecionada: null, // OP selecionada no momento
+  setorDestino: null,  // para rejeição
+};
 
-  if (telaId === 'tela-main')   iniciarTelaMain();
-  if (telaId === 'tela-status') carregarStatus();
-  if (telaId === 'tela-login')  fecharCamera();
+// ============================================================
+// UTILS
+// ============================================================
+function $(id) { return document.getElementById(id); }
+
+function mostrarTela(id) {
+  document.querySelectorAll('.tela').forEach(t => t.classList.remove('ativa'));
+  $(id).classList.add('ativa');
+}
+
+function loading(show, txt = 'PROCESSANDO...') {
+  $('loading').classList.toggle('ativo', show);
+  $('loading-txt').textContent = txt;
+}
+
+function toast(msg, tipo = '') {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = `toast ${tipo} visivel`;
+  setTimeout(() => el.classList.remove('visivel'), 3000);
+}
+
+async function api(params, body = null) {
+  const qs  = new URLSearchParams(params).toString();
+  const url = `${API}${qs ? '?' + qs : ''}`;
+  const opt = body
+    ? { method: 'POST', body: JSON.stringify(body) }
+    : { method: 'GET' };
+  const r = await fetch(url, opt);
+  return r.json();
+}
+
+function getSeq(setor) {
+  const s = SETORES.find(x => x.nome === setor || x.nome.split('-')[1] === setor);
+  return s ? s.seq : 0;
 }
 
 // ============================================================
-//  LOGIN
+// LOGIN
 // ============================================================
-// Operadores carregados via login direto (sem lista)
+async function iniciarLogin() {
+  loading(true, 'CARREGANDO OPERADORES...');
+  try {
+    const data = await api({ acao: 'getOperadores' });
+    const lista = $('lista-operadores');
+    lista.innerHTML = '';
+
+    if (!data.operadores || !data.operadores.length) {
+      lista.innerHTML = '<div class="select-item" style="color:var(--danger)">Nenhum operador cadastrado</div>';
+      return;
+    }
+
+    data.operadores.forEach(op => {
+      const item = document.createElement('div');
+      item.className = 'select-item';
+      item.textContent = `${op.nome} — ${op.setor}`;
+      item.dataset.id    = op.id;
+      item.dataset.nome  = op.nome;
+      item.dataset.setor = op.setor;
+      item.addEventListener('click', () => selecionarOperador(item, op));
+      lista.appendChild(item);
+    });
+  } catch(e) {
+    toast('Erro ao carregar operadores', 'erro');
+  } finally {
+    loading(false);
+  }
+}
+
+let operadorSelecionado = null;
+
+function selecionarOperador(el, op) {
+  document.querySelectorAll('#lista-operadores .select-item').forEach(i => i.classList.remove('selecionado'));
+  el.classList.add('selecionado');
+  operadorSelecionado = op;
+  $('campo-pin').focus();
+  atualizarBtnLogin();
+}
+
+function atualizarBtnLogin() {
+  $('btn-login').disabled = !(operadorSelecionado && $('campo-pin').value.length >= 4);
+}
 
 async function fazerLogin() {
-  const nome = document.getElementById('login-operador').value.trim();
-  const pin  = document.getElementById('login-pin').value.trim();
-  const erro = document.getElementById('login-erro');
-  erro.textContent = '';
+  if (!operadorSelecionado) return;
+  const pin = $('campo-pin').value.trim();
+  if (!pin) return;
 
-  if (!nome) { erro.textContent = 'Digite seu nome.'; return; }
-  if (!pin)  { erro.textContent = 'Digite o PIN.'; return; }
+  loading(true, 'AUTENTICANDO...');
+  $('login-erro').style.display = 'none';
 
-  mostrarLoading(true);
   try {
-    const resp = await apiPost({ action: 'login', nome, pin });
-    operadorLogado = resp.operador;
-    document.getElementById('header-nome').textContent  = operadorLogado.nome;
-    document.getElementById('header-setor').textContent = operadorLogado.setor;
-    irPara('tela-main');
-  } catch (e) {
-    erro.textContent = e.message || 'Usuário ou PIN inválido.';
+    const data = await api({}, { acao: 'login', nome: operadorSelecionado.nome, pin });
+    if (data.status === 'ok') {
+      estado.operador = data.operador;
+      entrarNaPrincipal();
+    } else {
+      $('login-erro').textContent = data.mensagem || 'Usuário ou PIN inválido';
+      $('login-erro').style.display = 'block';
+      $('campo-pin').value = '';
+    }
+  } catch(e) {
+    toast('Erro de conexão', 'erro');
   } finally {
-    mostrarLoading(false);
-  }
-}
-
-function fazerLogout() {
-  operadorLogado = null; opSelecionada = null; opsDisponiveis = [];
-  fecharCamera();
-  document.getElementById('login-operador').value = '';
-  document.getElementById('login-pin').value = '';
-  document.getElementById('login-erro').textContent = '';
-  irPara('tela-login');
-}
-
-function togglePin() {
-  const inp = document.getElementById('login-pin');
-  inp.type = inp.type === 'password' ? 'text' : 'password';
-}
-
-// ============================================================
-//  TELA MAIN — bifurca PCP x Setor
-// ============================================================
-async function iniciarTelaMain() {
-  if (!operadorLogado) { irPara('tela-login'); return; }
-  opSelecionada = null;
-  fecharCamera();
-
-  if (operadorLogado.isPCP) {
-    document.getElementById('secao-setor').classList.add('hidden');
-    document.getElementById('secao-pcp').classList.remove('hidden');
-    carregarStatusAdmin();
-  } else {
-    document.getElementById('secao-pcp').classList.add('hidden');
-    document.getElementById('secao-setor').classList.remove('hidden');
-    await mostrarSecaoSetor();
+    loading(false);
   }
 }
 
 // ============================================================
-//  SETOR — receber / rejeitar
+// TELA PRINCIPAL
 // ============================================================
-async function mostrarSecaoSetor() {
-  document.getElementById('setor-recebeDE').textContent = operadorLogado.recebeDE || '—';
-  const podRejeitar = operadorLogado.podeRejeitarPara.length > 0;
-  document.getElementById('btn-rejeitar').classList.toggle('hidden', !podRejeitar);
-  await carregarOPsDisponiveis();
+function entrarNaPrincipal() {
+  $('hd-nome').textContent  = estado.operador.nome;
+  $('hd-setor').textContent = estado.operador.setor;
+  mostrarTela('tela-principal');
+  carregarOPs();
 }
 
-async function carregarOPsDisponiveis() {
-  const lista = document.getElementById('ops-lista');
-  lista.innerHTML = '<div class="ops-loading">Carregando OPs...</div>';
-  opSelecionada = null;
-  atualizarBotoesAcao();
-  const busca = document.getElementById('busca-setor');
-  if (busca) busca.value = '';
+async function carregarOPs() {
+  loading(true, 'BUSCANDO OPs...');
   try {
-    opsDisponiveis = await apiGet('getOPsDisponiveis', { setor: operadorLogado.setor });
-    renderizarOPs(opsDisponiveis);
-  } catch (e) {
-    lista.innerHTML = '<div class="ops-loading">Erro ao carregar OPs.</div>';
+    const data = await api({ acao: 'getOPsDisponiveis', setor: estado.operador.setor });
+    if (data.status === 'ok') {
+      estado.ops = data.ops || [];
+      aplicarFiltro();
+    } else {
+      toast('Erro ao carregar OPs', 'erro');
+    }
+  } catch(e) {
+    toast('Erro de conexão', 'erro');
+  } finally {
+    loading(false);
   }
 }
 
-function renderizarOPs(ops) {
-  const lista = document.getElementById('ops-lista');
-  if (!ops || ops.length === 0) {
-    lista.innerHTML = `<div class="ops-vazia"><div class="ops-vazia-icon">📭</div><div>Nenhuma OP em ${operadorLogado.recebeDE || '—'}</div></div>`;
+function aplicarFiltro() {
+  const filtro = $('filtro-pedido').value.trim().toLowerCase();
+  estado.opsFiltradas = filtro
+    ? estado.ops.filter(op => String(op.pedido).toLowerCase().includes(filtro) || String(op.op).toLowerCase().includes(filtro))
+    : [...estado.ops];
+
+  estado.opSelecionada = null;
+  atualizarBotoes();
+  renderizarLista();
+}
+
+function renderizarLista() {
+  const lista = $('ops-lista');
+  $('contador-ops').textContent = estado.opsFiltradas.length;
+
+  if (!estado.opsFiltradas.length) {
+    lista.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">✓</div>
+        <div class="empty-state-txt">NENHUMA OP DISPONÍVEL</div>
+      </div>`;
     return;
   }
-  lista.innerHTML = ops.map(op => `
-    <div class="op-item" onclick="selecionarOP('${op.op}')" id="op-item-${op.op}">
-      <div class="op-item-header">
-        <span class="op-item-num">OP ${op.op}</span>
-        <span class="op-item-qtde">Qtde: ${op.qtde || '—'}</span>
+
+  lista.innerHTML = estado.opsFiltradas.map(op => `
+    <div class="op-card" data-op="${op.op}" onclick="selecionarOP('${op.op}')">
+      <div class="op-header">
+        <div class="op-numero">${op.op}</div>
+        <div class="op-pedido">PED ${op.pedido || '—'}</div>
       </div>
-      <div class="op-item-cod">${op.codigo || ''}</div>
-      <div class="op-item-desc">${op.descricao || ''}</div>
-      <div class="op-item-custodia">📍 ${op.custodia}</div>
-    </div>`
-  ).join('');
+      <div class="op-codigo">${op.codigo}</div>
+      <div class="op-desc">${op.descricao || '—'}</div>
+      <div class="op-footer">
+        <div class="op-qtde">${op.qtde} <span>UN</span></div>
+        <div class="op-setor-atual">${op.setorAtual}</div>
+      </div>
+    </div>
+  `).join('');
 }
 
 function selecionarOP(opNum) {
-  opSelecionada = opsDisponiveis.find(o => o.op.toString() === opNum.toString());
-  document.querySelectorAll('.op-item').forEach(el => el.classList.remove('selecionada'));
-  document.getElementById('op-item-' + opNum)?.classList.add('selecionada');
-  atualizarBotoesAcao();
+  estado.opSelecionada = estado.opsFiltradas.find(o => String(o.op) === String(opNum)) || null;
+
+  document.querySelectorAll('.op-card').forEach(c => {
+    c.classList.toggle('selecionado', c.dataset.op === String(opNum));
+  });
+
+  atualizarBotoes();
 }
 
-function filtrarOPs(termo) {
-  if (!termo) { renderizarOPs(opsDisponiveis); return; }
-  const t = termo.toLowerCase();
-  const filtrado = opsDisponiveis.filter(op =>
-    op.op?.toString().toLowerCase().includes(t) ||
-    op.codigo?.toString().toLowerCase().includes(t) ||
-    op.descricao?.toString().toLowerCase().includes(t)
-  );
-  renderizarOPs(filtrado);
-  // Seleciona automaticamente se só restar 1
-  if (filtrado.length === 1) selecionarOP(filtrado[0].op);
+function atualizarBotoes() {
+  const temSelecionada = !!estado.opSelecionada;
+  $('btn-receber').disabled  = !temSelecionada;
+  $('btn-rejeitar').disabled = !temSelecionada || getSeq(estado.operador.setor) <= 2;
 }
 
-function tentarQR(raw) {
-  raw = (raw || '').trim();
-  if (!raw.includes('@')) return;
-  // É um QR Code bipado — extrai a OP e seleciona
-  const op = raw.split('@')[0];
-  const encontrada = opsDisponiveis.find(o => o.op.toString() === op.toString());
-  if (encontrada) {
-    selecionarOP(op);
-    document.getElementById('busca-setor').value = op;
-    mostrarToast('✅ OP ' + op + ' selecionada!');
-  } else {
-    mostrarToast('⚠️ OP ' + op + ' não disponível para ' + operadorLogado.setor, true);
-  }
+// ============================================================
+// MODAL RECEBER
+// ============================================================
+function abrirModalReceber() {
+  const op = estado.opSelecionada;
+  if (!op) return;
+  $('mr-op').textContent      = op.op;
+  $('mr-codigo').textContent  = op.codigo;
+  $('mr-qtde').textContent    = op.qtde;
+  $('mr-pedido').textContent  = op.pedido || '—';
+  $('mr-cliente').textContent = op.cliente || '—';
+  $('mr-obs').value           = '';
+  $('modal-receber').classList.add('ativo');
 }
 
-function processarQR(raw) { tentarQR(raw); }
-
-function atualizarBotoesAcao() {
-  const tem = !!opSelecionada;
-  document.getElementById('btn-receber').disabled  = !tem;
-  document.getElementById('btn-rejeitar').disabled = !tem;
+function fecharModalReceber() {
+  $('modal-receber').classList.remove('ativo');
 }
 
-async function receberOP() {
-  if (!opSelecionada) return;
-  mostrarLoading(true);
+async function confirmarReceber() {
+  const op = estado.opSelecionada;
+  if (!op) return;
+
+  loading(true, 'GRAVANDO...');
+  fecharModalReceber();
+
   try {
-    const resp = await apiPost({
-      action: 'receberOP',
-      operadorNome: operadorLogado.nome,
-      setor: operadorLogado.setor,
-      op: opSelecionada.op
+    const data = await api({}, {
+      acao:      'receberOP',
+      op:        op.op,
+      codigo:    op.codigo,
+      qtde:      op.qtde,
+      pedido:    op.pedido,
+      setor:     estado.operador.setor,
+      operador:  estado.operador.nome,
+      obs:       $('mr-obs').value.trim()
     });
-    mostrarModal('✅',
-      `OP ${resp.op} recebida!\n${resp.descricao || ''}\nCustódia: ${resp.custodia}` +
-      (resp.proximoSetor ? '\nPróximo: ' + resp.proximoSetor : '')
-    );
-    await carregarOPsDisponiveis();
-  } catch (e) {
-    mostrarModal('❌', e.message);
+
+    if (data.status === 'ok') {
+      toast(data.mensagem, 'sucesso');
+      estado.opSelecionada = null;
+      await carregarOPs();
+    } else {
+      toast(data.erro || 'Erro ao gravar', 'erro');
+    }
+  } catch(e) {
+    toast('Erro de conexão', 'erro');
   } finally {
-    mostrarLoading(false);
+    loading(false);
   }
 }
 
+// ============================================================
+// MODAL REJEITAR
+// ============================================================
 function abrirModalRejeitar() {
-  if (!opSelecionada) return;
-  const sel = document.getElementById('rejeitar-destino');
-  sel.innerHTML = operadorLogado.podeRejeitarPara.map(d => `<option value="${d}">${d}</option>`).join('');
-  document.getElementById('rejeitar-motivo').value = '';
-  document.getElementById('modal-rejeitar').classList.remove('hidden');
-}
+  const op = estado.opSelecionada;
+  if (!op) return;
 
-async function confirmarRejeicao() {
-  const destino = document.getElementById('rejeitar-destino').value;
-  const motivo  = document.getElementById('rejeitar-motivo').value.trim();
-  if (!motivo) { mostrarToast('⚠️ Informe o motivo.', true); return; }
-  fecharModalRejeitar();
-  mostrarLoading(true);
-  try {
-    const resp = await apiPost({
-      action: 'rejeitarOP', operadorNome: operadorLogado.nome,
-      setor: operadorLogado.setor, op: opSelecionada.op, destino, motivo
-    });
-    mostrarModal('↩️', `OP ${resp.op} rejeitada!\nEnviada para: ${resp.custodia}\nMotivo: ${motivo}`);
-    await carregarOPsDisponiveis();
-  } catch (e) {
-    mostrarModal('❌', e.message);
-  } finally {
-    mostrarLoading(false);
-  }
+  $('mj-op').textContent = op.op;
+  $('mj-obs').value      = '';
+  estado.setorDestino    = null;
+
+  // Montar destinos possíveis (setores anteriores ao atual)
+  const seqAtual = getSeq(estado.operador.setor);
+  const destinos = SETORES.filter(s => s.seq < seqAtual && s.seq > 1);
+
+  $('mj-destinos').innerHTML = destinos.map(s => `
+    <button class="rejeitar-op-btn" onclick="selecionarDestino('${s.nome}', this)">
+      ${s.nome}
+    </button>
+  `).join('');
+
+  $('modal-rejeitar').classList.add('ativo');
 }
 
 function fecharModalRejeitar() {
-  document.getElementById('modal-rejeitar').classList.add('hidden');
+  $('modal-rejeitar').classList.remove('ativo');
 }
 
-// ============================================================
-//  PCP ADMIN
-// ============================================================
-function pcpTab(tab) {
-  document.querySelectorAll('.pcp-tab').forEach(t => t.classList.remove('ativo'));
-  document.querySelectorAll('.pcp-tab-content').forEach(t => t.classList.add('hidden'));
-  event.target.classList.add('ativo');
-  document.getElementById('pcp-tab-' + tab).classList.remove('hidden');
+function selecionarDestino(setor, el) {
+  estado.setorDestino = setor;
+  document.querySelectorAll('.rejeitar-op-btn').forEach(b => b.classList.remove('selecionado'));
+  el.classList.add('selecionado');
 }
 
-async function sincronizarStatus() {
-  mostrarLoading(true);
-  try {
-    const resp = await apiGet('sincronizarStatus');
-    mostrarToast(`✅ ${resp.sincronizadas} OPs sincronizadas!`);
-    await carregarStatusAdmin();
-  } catch (e) {
-    mostrarModal('❌', 'Erro ao sincronizar: ' + e.message);
-  } finally {
-    mostrarLoading(false);
-  }
-}
-
-// ── Fluxo Geral (admin) ──
-async function carregarStatusAdmin() {
-  const lista = document.getElementById('pcp-status-lista');
-  lista.innerHTML = '<div class="ops-loading">Carregando...</div>';
-  try {
-    // PCP vê todas as pendências (aba Pendencias)
-    statusAdminData = await apiGet('getPendencias');
-    // Também busca as que já estão no fluxo
-    const emFluxo = await apiGet('getFluxoStatus');
-    // Junta tudo sem duplicar
-    const opsNoFluxo = new Set(emFluxo.map(r => r['OP']?.toString()));
-    const pendSemFluxo = statusAdminData.filter(p => !opsNoFluxo.has(p.op?.toString()));
-    // Formata pendências no mesmo formato do fluxoStatus
-    const pendFormatadas = pendSemFluxo.map(p => ({
-      'OP':                  p.op,
-      'Código':              p.codigo,
-      'Descrição':           p.descricao,
-      'Qtde':                p.qtde,
-      'Custódia':            'PENDENTE',
-      'Última Atualização':  p.data,
-      'Último Operador':     p.cliente
-    }));
-    statusAdminData = [...pendFormatadas, ...emFluxo];
-    renderizarStatusAdmin(statusAdminData);
-  } catch (e) {
-    lista.innerHTML = '<div class="ops-loading">Erro ao carregar.</div>';
-  }
-}
-
-function filtrarStatusAdmin() {
-  const t = document.getElementById('pcp-busca').value.toLowerCase();
-  if (!t) { renderizarStatusAdmin(statusAdminData); return; }
-  renderizarStatusAdmin(statusAdminData.filter(r =>
-    r['OP']?.toString().toLowerCase().includes(t) ||
-    r['Código']?.toString().toLowerCase().includes(t) ||
-    r['Descrição']?.toString().toLowerCase().includes(t) ||
-    r['Custódia']?.toString().toLowerCase().includes(t) ||
-    r['Último Operador']?.toString().toLowerCase().includes(t)
-  ));
-}
-
-function renderizarStatusAdmin(dados) {
-  const lista = document.getElementById('pcp-status-lista');
-  if (!dados || dados.length === 0) {
-    lista.innerHTML = '<div class="ops-vazia"><div class="ops-vazia-icon">📭</div><div>Nenhuma OP.</div></div>';
+async function confirmarRejeitar() {
+  const op = estado.opSelecionada;
+  if (!op || !estado.setorDestino) {
+    toast('Selecione o destino da rejeição', 'erro');
     return;
   }
-  lista.innerHTML = dados.map(r => {
-    const custodia = r['Custódia'] || 'PENDENTE';
-    const cor      = COR_SETOR[custodia.toUpperCase()] || '#455A64';
-    const isPend   = custodia === 'PENDENTE';
-    const sub      = isPend
-      ? (r['Último Operador'] || '') // cliente
-      : `👤 ${r['Último Operador'] || '—'} · 🕐 ${formatarData(r['Última Atualização'])}`;
-    return `
-      <div class="status-card" onclick="verHistoricoAdmin('${r['OP']}')">
-        <div class="status-card-top" style="border-left:4px solid ${cor}">
-          <div style="flex:1;min-width:0">
-            <div class="status-op">OP ${r['OP']}</div>
-            <div class="status-cod">${r['Código'] || ''}</div>
-            <div class="status-desc">${r['Descrição'] || ''}</div>
-          </div>
-          <div class="status-right">
-            <div class="status-badge" style="background:${cor}">${custodia}</div>
-            <div class="status-qtde">Qtde: ${r['Qtde'] || '—'}</div>
-          </div>
-        </div>
-        <div class="status-footer">${sub}</div>
-      </div>`;
-  }).join('');
-}
 
-async function verHistoricoAdmin(op) {
-  mostrarLoading(true);
+  loading(true, 'GRAVANDO...');
+  fecharModalRejeitar();
+
   try {
-    const hist = await apiGet('getHistoricoOP', { op });
-    // Busca foto do produto
-    const statusOp = statusAdminData.find(r => r['OP']?.toString() === op.toString());
-    if (statusOp?.['Código']) {
-      try {
-        const prod = await apiGet('getCadastroProduto', { codigo: statusOp['Código'] });
-        if (prod.foto) {
-          const fotoEl = document.getElementById('modal-hist-foto');
-          fotoEl.src = prod.foto;
-          document.getElementById('modal-hist-foto-wrap').classList.remove('hidden');
-        }
-      } catch (e) { /* sem foto */ }
+    const data = await api({}, {
+      acao:         'rejeitarOP',
+      op:           op.op,
+      codigo:       op.codigo,
+      qtde:         op.qtde,
+      pedido:       op.pedido,
+      setor:        estado.operador.setor,
+      setorDestino: estado.setorDestino,
+      operador:     estado.operador.nome,
+      obs:          $('mj-obs').value.trim()
+    });
+
+    if (data.status === 'ok') {
+      toast(data.mensagem, 'sucesso');
+      estado.opSelecionada = null;
+      await carregarOPs();
+    } else {
+      toast(data.erro || 'Erro ao gravar', 'erro');
     }
-    document.getElementById('modal-hist-op').textContent      = 'OP ' + op;
-    document.getElementById('modal-hist-produto').textContent = statusOp?.['Descrição'] || '';
-    document.getElementById('modal-hist-body').innerHTML = renderizarHistorico(hist, true);
-    document.getElementById('modal-historico').classList.remove('hidden');
-  } catch (e) {
-    mostrarModal('❌', e.message);
+  } catch(e) {
+    toast('Erro de conexão', 'erro');
   } finally {
-    mostrarLoading(false);
-  }
-}
-
-function renderizarHistorico(hist, comBotaoApagar = false) {
-  if (!hist || hist.length === 0) return '<p style="color:#aaa;text-align:center">Sem histórico.</p>';
-  return hist.map(h => {
-    const acao     = h['Acao'] || h['Ação'] || '';
-    const setor    = h['Setor'] || '';
-    const operador = h['Operador'] || '—';
-    const obs      = h['OBS'] || '';
-    const data     = h['Data'] || '';
-    const qtde     = h['Qtde'] || '';
-    const id       = h['ID'] || '';
-    const op       = h['OP'] || '';
-    const btnApagar = comBotaoApagar
-      ? `<button class="btn-apagar-reg" onclick="apagarRegistro('${id}','${op}')">🗑</button>`
-      : '';
-    return `
-    <div class="hist-item hist-${acao.toLowerCase().replace(/ /g,'-')}">
-      <div class="hist-header-row">
-        <div class="hist-acao">${iconeAcao(acao)} ${setor}</div>
-        ${btnApagar}
-      </div>
-      <div class="hist-detalhe">Qtde: ${qtde} · ${acao}</div>
-      <div class="hist-meta">👤 ${operador} · 🕐 ${formatarData(data)}</div>
-      ${obs ? `<div class="hist-obs">💬 ${obs}</div>` : ''}
-    </div>`;
-  }).join('');
-}
-
-function fecharModalHistorico() {
-  document.getElementById('modal-historico').classList.add('hidden');
-  document.getElementById('modal-hist-foto-wrap').classList.add('hidden');
-  document.getElementById('modal-hist-foto').src = '';
-}
-
-async function apagarRegistro(registroId, op) {
-  if (!confirm('Apagar este registro?')) return;
-  mostrarLoading(true);
-  try {
-    await apiPost({ action: 'apagarRegistro', operadorNome: operadorLogado.nome, registroId });
-    mostrarToast('✅ Registro apagado!');
-    fecharModalHistorico();
-    carregarStatusAdmin();
-  } catch (e) {
-    mostrarModal('❌', e.message);
-  } finally {
-    mostrarLoading(false);
-  }
-}
-
-// ── Mover OP ──
-async function moverOP() {
-  const op       = document.getElementById('mover-op').value.trim();
-  const custodia = document.getElementById('mover-custodia').value;
-  const motivo   = document.getElementById('mover-motivo').value.trim();
-  if (!op || !custodia || !motivo) { mostrarModal('⚠️', 'Preencha todos os campos.'); return; }
-  mostrarLoading(true);
-  try {
-    const resp = await apiPost({ action: 'moverOP', operadorNome: operadorLogado.nome, op, novaCustodia: custodia, motivo });
-    mostrarModal('✅', `OP ${resp.op} movida!\nNova custódia: ${resp.custodia}`);
-    document.getElementById('mover-op').value     = '';
-    document.getElementById('mover-motivo').value = '';
-    carregarStatusAdmin();
-  } catch (e) {
-    mostrarModal('❌', e.message);
-  } finally {
-    mostrarLoading(false);
-  }
-}
-
-// ── Editar OP ──
-async function editarOP() {
-  const op   = document.getElementById('editar-op').value.trim();
-  const qtde = document.getElementById('editar-qtde').value.trim();
-  const desc = document.getElementById('editar-desc').value.trim();
-  if (!op) { mostrarModal('⚠️', 'Informe a OP.'); return; }
-  if (!qtde && !desc) { mostrarModal('⚠️', 'Altere ao menos um campo.'); return; }
-  mostrarLoading(true);
-  try {
-    await apiPost({ action: 'editarOP', operadorNome: operadorLogado.nome, op, qtde, descricao: desc });
-    mostrarModal('✅', 'OP ' + op + ' atualizada!');
-    carregarStatusAdmin();
-  } catch (e) {
-    mostrarModal('❌', e.message);
-  } finally {
-    mostrarLoading(false);
+    loading(false);
   }
 }
 
 // ============================================================
-//  STATUS GERAL (tela-status)
+// EVENTOS
 // ============================================================
-const COR_SETOR = {
-  'PENDENTE':'#78909C',
-  'ESTOQUE':'#1565C0','PRODUÇÃO':'#E65100','QUALIDADE':'#2E7D32',
-  'CONSOLIDAÇÃO':'#00838F','EXPEDIDO':'#558B2F','PA':'#4527A0','RESERVA':'#6D4C41'
-};
+document.addEventListener('DOMContentLoaded', () => {
+  // Login
+  iniciarLogin();
 
-async function carregarStatus() {
-  const lista = document.getElementById('status-lista');
-  lista.innerHTML = '<div class="ops-loading">Carregando...</div>';
-  try {
-    statusData = await apiGet('getFluxoStatus');
-    renderizarStatus(statusData);
-  } catch (e) {
-    lista.innerHTML = '<div class="ops-loading">Erro ao carregar.</div>';
-  }
-}
+  $('campo-pin').addEventListener('input', atualizarBtnLogin);
+  $('campo-pin').addEventListener('keydown', e => { if (e.key === 'Enter') fazerLogin(); });
+  $('btn-login').addEventListener('click', fazerLogin);
 
-function filtrarStatus() {
-  const t = document.getElementById('busca-op').value.toLowerCase();
-  renderizarStatus(statusData.filter(r =>
-    r['OP']?.toString().toLowerCase().includes(t) ||
-    r['Código']?.toString().toLowerCase().includes(t) ||
-    r['Descrição']?.toString().toLowerCase().includes(t) ||
-    r['Custódia']?.toString().toLowerCase().includes(t)
-  ));
-}
-
-function renderizarStatus(dados) {
-  const lista = document.getElementById('status-lista');
-  if (!dados || dados.length === 0) {
-    lista.innerHTML = '<div class="ops-vazia"><div class="ops-vazia-icon">📭</div><div>Nenhuma OP.</div></div>';
-    return;
-  }
-  lista.innerHTML = dados.map(r => {
-    const cor = COR_SETOR[r['Custódia']?.toString().toUpperCase()] || '#455A64';
-    return `
-      <div class="status-card" onclick="verHistorico('${r['OP']}','${r['Código'] || ''}','${r['Descrição'] || ''}')">
-        <div class="status-card-top" style="border-left:4px solid ${cor}">
-          <div>
-            <div class="status-op">OP ${r['OP']}</div>
-            <div class="status-cod">${r['Código'] || ''}</div>
-            <div class="status-desc">${r['Descrição'] || ''}</div>
-          </div>
-          <div class="status-right">
-            <div class="status-badge" style="background:${cor}">${r['Custódia'] || '—'}</div>
-            <div class="status-qtde">Qtde: ${r['Qtde'] || '—'}</div>
-          </div>
-        </div>
-        <div class="status-footer">👤 ${r['Último Operador'] || '—'} · 🕐 ${formatarData(r['Última Atualização'])}</div>
-      </div>`;
-  }).join('');
-}
-
-async function verHistorico(op, codigo, descricao) {
-  mostrarLoading(true);
-  try {
-    const hist = await apiGet('getHistoricoOP', { op });
-
-    // Carrega foto
-    if (codigo) {
-      try {
-        const prod = await apiGet('getCadastroProduto', { codigo });
-        if (prod.foto) {
-          const fotoEl = document.getElementById('modal-hist-foto');
-          fotoEl.src = prod.foto;
-          fotoEl.onload  = () => document.getElementById('modal-hist-foto-wrap').classList.remove('hidden');
-          fotoEl.onerror = () => document.getElementById('modal-hist-foto-wrap').classList.add('hidden');
-        }
-      } catch (e) { /* sem foto */ }
-    }
-
-    document.getElementById('modal-hist-op').textContent      = 'OP ' + op;
-    document.getElementById('modal-hist-produto').textContent = descricao || '';
-    document.getElementById('modal-hist-body').innerHTML      = renderizarHistorico(hist, false);
-    document.getElementById('modal-historico').classList.remove('hidden');
-  } catch (e) {
-    mostrarModal('❌', e.message);
-  } finally {
-    mostrarLoading(false);
-  }
-}
-
-// ============================================================
-//  CÂMERA
-// ============================================================
-async function abrirCamera() {
-  if (!jsQRLoaded) {
-    await carregarScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js');
-    jsQRLoaded = true;
-  }
-  try {
-    streamCamera = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    document.getElementById('camera-video').srcObject = streamCamera;
-    document.getElementById('camera-container').classList.remove('hidden');
-    escanearFrames();
-  } catch (e) {
-    mostrarModal('❌', 'Não foi possível acessar a câmera.');
-  }
-}
-
-function fecharCamera() {
-  if (streamCamera) { streamCamera.getTracks().forEach(t => t.stop()); streamCamera = null; }
-  document.getElementById('camera-container')?.classList.add('hidden');
-}
-
-function escanearFrames() {
-  const video = document.getElementById('camera-video');
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  function tick() {
-    if (!streamCamera) return;
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
-      const img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(img.data, img.width, img.height);
-      if (code) { processarQR(code.data); return; }
-    }
-    requestAnimationFrame(tick);
-  }
-  requestAnimationFrame(tick);
-}
-
-// ============================================================
-//  API / UI HELPERS
-// ============================================================
-async function apiGet(action, params = {}) {
-  const qs   = new URLSearchParams({ action, ...params }).toString();
-  const resp = await fetch(`${API_URL}?${qs}`, {
-    redirect: 'follow',
-    method: 'GET',
+  // Principal
+  $('btn-sair').addEventListener('click', () => {
+    estado = { operador: null, ops: [], opsFiltradas: [], opSelecionada: null, setorDestino: null };
+    operadorSelecionado = null;
+    $('campo-pin').value = '';
+    $('btn-login').disabled = true;
+    document.querySelectorAll('#lista-operadores .select-item').forEach(i => i.classList.remove('selecionado'));
+    mostrarTela('tela-login');
   });
-  const json = await resp.json();
-  if (json.status !== 'ok') throw new Error(json.message || 'Erro na API');
-  return json.data;
-}
 
-async function apiPost(body) {
-  const resp = await fetch(API_URL, {
-    method: 'POST',
-    redirect: 'follow',
-    body: JSON.stringify(body)
+  $('btn-atualizar').addEventListener('click', carregarOPs);
+  $('filtro-pedido').addEventListener('input', aplicarFiltro);
+  $('btn-limpar-filtro').addEventListener('click', () => {
+    $('filtro-pedido').value = '';
+    aplicarFiltro();
   });
-  const json = await resp.json();
-  if (json.status !== 'ok') throw new Error(json.message || 'Erro na API');
-  return json.data;
-}
 
-function mostrarModal(icon, msg) {
-  document.getElementById('modal-icon').textContent = icon;
-  document.getElementById('modal-msg').textContent  = msg;
-  document.getElementById('modal-overlay').classList.remove('hidden');
-}
-function fecharModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
+  $('btn-receber').addEventListener('click', abrirModalReceber);
+  $('btn-rejeitar').addEventListener('click', abrirModalRejeitar);
 
-function mostrarToast(msg, erro = false) {
-  let t = document.getElementById('toast');
-  if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
-  t.textContent = msg;
-  t.className   = 'toast ' + (erro ? 'toast-erro' : 'toast-ok');
-  t.classList.remove('hidden');
-  clearTimeout(t._timer);
-  t._timer = setTimeout(() => t.classList.add('hidden'), 3000);
-}
+  // Modal receber
+  $('mr-cancelar').addEventListener('click', fecharModalReceber);
+  $('mr-confirmar').addEventListener('click', confirmarReceber);
+  $('modal-receber').addEventListener('click', e => { if (e.target === $('modal-receber')) fecharModalReceber(); });
 
-function mostrarLoading(ativo) {
-  document.getElementById('loading').classList.toggle('hidden', !ativo);
-}
-
-function formatarData(val) {
-  if (!val) return '—';
-  try {
-    const d = new Date(val);
-    return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
-  } catch { return val; }
-}
-
-function iconeAcao(acao) {
-  if (!acao) return '·';
-  const a = acao.toUpperCase();
-  if (a.includes('LANÇAMENTO'))  return '🚀';
-  if (a.includes('RECEBIMENTO')) return '✅';
-  if (a.includes('REJEIÇÃO'))    return '↩️';
-  if (a.includes('AJUSTE'))      return '🔧';
-  return '·';
-}
-
-function carregarScript(src) {
-  return new Promise((res, rej) => {
-    const s = document.createElement('script');
-    s.src = src; s.onload = res; s.onerror = rej;
-    document.head.appendChild(s);
-  });
-}
+  // Modal rejeitar
+  $('mj-cancelar').addEventListener('click', fecharModalRejeitar);
+  $('mj-confirmar').addEventListener('click', confirmarRejeitar);
+  $('modal-rejeitar').addEventListener('click', e => { if (e.target === $('modal-rejeitar')) fecharModalRejeitar(); });
+});
