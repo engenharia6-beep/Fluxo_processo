@@ -250,6 +250,19 @@ function pcpTab(tab) {
   document.getElementById('pcp-tab-' + tab).classList.remove('hidden');
 }
 
+async function sincronizarStatus() {
+  mostrarLoading(true);
+  try {
+    const resp = await apiGet('sincronizarStatus');
+    mostrarToast(`✅ ${resp.sincronizadas} OPs sincronizadas!`);
+    await carregarStatusAdmin();
+  } catch (e) {
+    mostrarModal('❌', 'Erro ao sincronizar: ' + e.message);
+  } finally {
+    mostrarLoading(false);
+  }
+}
+
 // ── Fluxo Geral (admin) ──
 async function carregarStatusAdmin() {
   const lista = document.getElementById('pcp-status-lista');
