@@ -17,7 +17,6 @@ let statusAdminData = [];
 //  INIT
 // ============================================================
 window.addEventListener('DOMContentLoaded', () => {
-  carregarOperadores();
   document.getElementById('setor-qr')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') processarQR(e.target.value);
   });
@@ -42,48 +41,26 @@ function irPara(telaId) {
 // ============================================================
 //  LOGIN
 // ============================================================
-async function carregarOperadores() {
-  try {
-    const lista = await apiGet('getOperadores');
-    const sel = document.getElementById('login-operador');
-    if (!lista || lista.length === 0) {
-      sel.innerHTML = '<option value="">Nenhum operador cadastrado</option>';
-      return;
-    }
-    sel.innerHTML = '<option value="">Selecione o operador</option>';
-    lista.forEach(op => {
-      const opt = document.createElement('option');
-      opt.value = op.id;
-      opt.textContent = op.nome;
-      opt.dataset.nome  = op.nome;
-      opt.dataset.setor = op.setor;
-      sel.appendChild(opt);
-    });
-  } catch (e) {
-    document.getElementById('login-operador').innerHTML =
-      '<option value="">Erro: ' + e.message + '</option>';
-    console.error('Erro ao carregar operadores:', e);
-  }
-}
+// Operadores carregados via login direto (sem lista)
 
 async function fazerLogin() {
-  const sel  = document.getElementById('login-operador');
+  const nome = document.getElementById('login-operador').value.trim();
   const pin  = document.getElementById('login-pin').value.trim();
   const erro = document.getElementById('login-erro');
   erro.textContent = '';
-  if (!sel.value) { erro.textContent = 'Selecione um operador.'; return; }
-  if (!pin)        { erro.textContent = 'Digite o PIN.'; return; }
+
+  if (!nome) { erro.textContent = 'Digite seu nome.'; return; }
+  if (!pin)  { erro.textContent = 'Digite o PIN.'; return; }
 
   mostrarLoading(true);
   try {
-    const opt  = sel.options[sel.selectedIndex];
-    const resp = await apiPost({ action: 'login', nome: opt.dataset.nome, pin });
+    const resp = await apiPost({ action: 'login', nome, pin });
     operadorLogado = resp.operador;
     document.getElementById('header-nome').textContent  = operadorLogado.nome;
     document.getElementById('header-setor').textContent = operadorLogado.setor;
     irPara('tela-main');
   } catch (e) {
-    erro.textContent = e.message || 'Erro ao fazer login.';
+    erro.textContent = e.message || 'Usuário ou PIN inválido.';
   } finally {
     mostrarLoading(false);
   }
@@ -92,6 +69,7 @@ async function fazerLogin() {
 function fazerLogout() {
   operadorLogado = null; opSelecionada = null; opsDisponiveis = [];
   fecharCamera();
+  document.getElementById('login-operador').value = '';
   document.getElementById('login-pin').value = '';
   document.getElementById('login-erro').textContent = '';
   irPara('tela-login');
