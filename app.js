@@ -271,7 +271,24 @@ async function carregarStatusAdmin() {
   const lista = document.getElementById('pcp-status-lista');
   lista.innerHTML = '<div class="ops-loading">Carregando...</div>';
   try {
-    statusAdminData = await apiGet('getFluxoStatus');
+    // PCP vê todas as pendências (aba Pendencias)
+    statusAdminData = await apiGet('getPendencias');
+    // Também busca as que já estão no fluxo
+    const emFluxo = await apiGet('getFluxoStatus');
+    // Junta tudo sem duplicar
+    const opsNoFluxo = new Set(emFluxo.map(r => r['OP']?.toString()));
+    const pendSemFluxo = statusAdminData.filter(p => !opsNoFluxo.has(p.op?.toString()));
+    // Formata pendências no mesmo formato do fluxoStatus
+    const pendFormatadas = pendSemFluxo.map(p => ({
+      'OP':                  p.op,
+      'Código':              p.codigo,
+      'Descrição':           p.descricao,
+      'Qtde':                p.qtde,
+      'Custódia':            'PENDENTE',
+      'Última Atualização':  p.data,
+      'Último Operador':     p.cliente
+    }));
+    statusAdminData = [...pendFormatadas, ...emFluxo];
     renderizarStatusAdmin(statusAdminData);
   } catch (e) {
     lista.innerHTML = '<div class="ops-loading">Erro ao carregar.</div>';
@@ -280,10 +297,13 @@ async function carregarStatusAdmin() {
 
 function filtrarStatusAdmin() {
   const t = document.getElementById('pcp-busca').value.toLowerCase();
+  if (!t) { renderizarStatusAdmin(statusAdminData); return; }
   renderizarStatusAdmin(statusAdminData.filter(r =>
     r['OP']?.toString().toLowerCase().includes(t) ||
     r['Código']?.toString().toLowerCase().includes(t) ||
-    r['Custódia']?.toString().toLowerCase().includes(t)
+    r['Descrição']?.toString().toLowerCase().includes(t) ||
+    r['Custódia']?.toString().toLowerCase().includes(t) ||
+    r['Último Operador']?.toString().toLowerCase().includes(t)
   ));
 }
 
@@ -294,21 +314,26 @@ function renderizarStatusAdmin(dados) {
     return;
   }
   lista.innerHTML = dados.map(r => {
-    const cor = COR_SETOR[r['Custódia']?.toString().toUpperCase()] || '#455A64';
+    const custodia = r['Custódia'] || 'PENDENTE';
+    const cor      = COR_SETOR[custodia.toUpperCase()] || '#455A64';
+    const isPend   = custodia === 'PENDENTE';
+    const sub      = isPend
+      ? (r['Último Operador'] || '') // cliente
+      : `👤 ${r['Último Operador'] || '—'} · 🕐 ${formatarData(r['Última Atualização'])}`;
     return `
       <div class="status-card" onclick="verHistoricoAdmin('${r['OP']}')">
         <div class="status-card-top" style="border-left:4px solid ${cor}">
-          <div>
+          <div style="flex:1;min-width:0">
             <div class="status-op">OP ${r['OP']}</div>
             <div class="status-cod">${r['Código'] || ''}</div>
             <div class="status-desc">${r['Descrição'] || ''}</div>
           </div>
           <div class="status-right">
-            <div class="status-badge" style="background:${cor}">${r['Custódia'] || '—'}</div>
+            <div class="status-badge" style="background:${cor}">${custodia}</div>
             <div class="status-qtde">Qtde: ${r['Qtde'] || '—'}</div>
           </div>
         </div>
-        <div class="status-footer">👤 ${r['Último Operador'] || '—'} · 🕐 ${formatarData(r['Última Atualização'])}</div>
+        <div class="status-footer">${sub}</div>
       </div>`;
   }).join('');
 }
@@ -342,17 +367,24 @@ async function verHistoricoAdmin(op) {
 
 function renderizarHistorico(hist, comBotaoApagar = false) {
   if (!hist || hist.length === 0) return '<p style="color:#aaa;text-align:center">Sem histórico.</p>';
-  return hist.map(h => `
-    <div class="hist-item hist-${(h['Ação']||'').toLowerCase().replace(' ','-')}">
+  return hist.map(h => {
+    const acao     = h['Acao'] || h['Ação'] || '';
+    const setor    = h['Setor'] || '';
+    const operador = h['Operador'] || '—';
+    const obs      = h['OBS'] || '';
+    const data     = h['Data'] || '';
+    const qtde     = h['Qtde'] || '';
+    return `
+    <div class="hist-item hist-${acao.toLowerCase().replace(/ /g,'-')}">
       <div class="hist-header-row">
-        <div class="hist-acao">${iconeAcao(h['Ação'])} ${h['Ação']}</div>
-        ${comBotaoApagar ? `<button class="btn-apagar-reg" onclick="apagarRegistro('${h['ID']}','${h['OP']}')">🗑</button>` : ''}
+        <div class="hist-acao">${iconeAcao(acao)} ${setor}</div>
+        ${comBotaoApagar ? '<button class="btn-apagar-reg" onclick="apagarRegistro(''+h['ID']+'',''+h['OP']+'')">🗑</button>' : ''}
       </div>
-      <div class="hist-detalhe">${h['Custódia De'] || '—'} → ${h['Custódia Até'] || '—'}</div>
-      <div class="hist-meta">👤 ${h['Operador']} · ${h['Setor']} · 🕐 ${formatarData(h['Data'])}</div>
-      ${h['OBS'] ? `<div class="hist-obs">💬 ${h['OBS']}</div>` : ''}
-    </div>`
-  ).join('');
+      <div class="hist-detalhe">Qtde: ${qtde} · ${acao}</div>
+      <div class="hist-meta">👤 ${operador} · 🕐 ${formatarData(data)}</div>
+      ${obs ? '<div class="hist-obs">💬 '+obs+'</div>' : ''}
+    </div>`;
+  }).join('');
 }
 
 function fecharModalHistorico() {
@@ -419,6 +451,7 @@ async function editarOP() {
 //  STATUS GERAL (tela-status)
 // ============================================================
 const COR_SETOR = {
+  'PENDENTE':'#78909C',
   'ESTOQUE':'#1565C0','PRODUÇÃO':'#E65100','QUALIDADE':'#2E7D32',
   'CONSOLIDAÇÃO':'#00838F','EXPEDIDO':'#558B2F','PA':'#4527A0','RESERVA':'#6D4C41'
 };
