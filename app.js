@@ -1,32 +1,24 @@
 // ============================================================
-//  CONTROLE PRODUTIVO — app.js
-//  Configure a URL do seu Apps Script abaixo:
+//  CONTROLE DE FLUXO PRODUTIVO — app.js v2.0
 // ============================================================
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbwrZjdIKTpNdneierfTXhDosahkXsnIN8oNun-cPV8adVekAAQddRR3LMpeH1Q1je5zGQ/exec';
 
 // ─── Estado global ────────────────────────────────────────
-let operadorLogado  = null;   // { id, nome, processo }
-let statusSelecionado = 'I';  // 'I' ou 'F'
-let qrDados         = null;   // { op, codigo, qtde, raw }
-let streamCamera    = null;   // MediaStream ativo
-let statusData      = [];     // cache do Fluxo_Status
-
-// ─── QRCode scanner (jsQR via CDN) ────────────────────────
-let jsQRLoaded = false;
+let operadorLogado = null;  // { id, nome, setor, isPCP, podeRejeitarPara, recebeDE }
+let opsDisponiveis = [];    // lista de OPs que o setor pode receber
+let opSelecionada  = null;  // { op, codigo, descricao, qtde }
+let streamCamera   = null;
+let jsQRLoaded     = false;
+let fluxoConfig    = [];    // config do fluxo vinda da API
 
 // ============================================================
 //  INIT
 // ============================================================
 window.addEventListener('DOMContentLoaded', () => {
   carregarOperadores();
-
-  // Scanner externo: foca o input de QR automaticamente quando
-  // a tela de scan está ativa
-  document.getElementById('qr-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      processarQR(document.getElementById('qr-input').value);
-    }
+  document.getElementById('qr-input')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') processarQR(e.target.value);
   });
 });
 
@@ -42,14 +34,9 @@ function irPara(telaId) {
   alvo.style.display = 'flex';
   alvo.classList.add('ativa');
 
-  // Ações ao entrar em cada tela
-  if (telaId === 'tela-scan') {
-    iniciarTelaScan();
-  } else if (telaId === 'tela-status') {
-    carregarStatus();
-  } else if (telaId === 'tela-home') {
-    fecharCamera();
-  }
+  if (telaId === 'tela-main')   iniciarTelaMain();
+  if (telaId === 'tela-status') carregarStatus();
+  if (telaId === 'tela-login')  fecharCamera();
 }
 
 // ============================================================
@@ -62,41 +49,42 @@ async function carregarOperadores() {
     sel.innerHTML = '<option value="">Selecione o operador</option>';
     lista.forEach(op => {
       const opt = document.createElement('option');
-      opt.value = op.id;
+      opt.value       = op.id;
       opt.textContent = op.nome;
-      opt.dataset.nome = op.nome;
-      opt.dataset.processo = op.processo;
+      opt.dataset.nome  = op.nome;
+      opt.dataset.setor = op.setor;
       sel.appendChild(opt);
     });
   } catch (e) {
     document.getElementById('login-operador').innerHTML =
-      '<option value="">Erro ao carregar — verifique a API</option>';
+      '<option value="">Erro ao carregar</option>';
   }
 }
 
 async function fazerLogin() {
-  const sel = document.getElementById('login-operador');
-  const pin = document.getElementById('login-pin').value.trim();
-  const erroEl = document.getElementById('login-erro');
-  erroEl.textContent = '';
+  const sel  = document.getElementById('login-operador');
+  const pin  = document.getElementById('login-pin').value.trim();
+  const erro = document.getElementById('login-erro');
+  erro.textContent = '';
 
-  if (!sel.value) { erroEl.textContent = 'Selecione um operador.'; return; }
-  if (!pin)        { erroEl.textContent = 'Digite o PIN.'; return; }
+  if (!sel.value) { erro.textContent = 'Selecione um operador.'; return; }
+  if (!pin)        { erro.textContent = 'Digite o PIN.'; return; }
 
   const opt = sel.options[sel.selectedIndex];
   mostrarLoading(true);
-
   try {
     const resp = await apiPost({ action: 'login', nome: opt.dataset.nome, pin });
     operadorLogado = resp.operador;
 
-    // Atualiza header
-    document.getElementById('header-operador').textContent  = operadorLogado.nome;
-    document.getElementById('header-processo').textContent  = operadorLogado.processo;
+    // Carrega config do fluxo
+    fluxoConfig = await apiGet('getFluxoConfig');
 
-    irPara('tela-home');
+    document.getElementById('header-nome').textContent  = operadorLogado.nome;
+    document.getElementById('header-setor').textContent = operadorLogado.setor;
+
+    irPara('tela-main');
   } catch (e) {
-    erroEl.textContent = e.message || 'Erro ao fazer login.';
+    erro.textContent = e.message || 'Erro ao fazer login.';
   } finally {
     mostrarLoading(false);
   }
@@ -104,9 +92,10 @@ async function fazerLogin() {
 
 function fazerLogout() {
   operadorLogado = null;
-  qrDados = null;
+  opSelecionada  = null;
+  opsDisponiveis = [];
   fecharCamera();
-  document.getElementById('login-pin').value = '';
+  document.getElementById('login-pin').value   = '';
   document.getElementById('login-erro').textContent = '';
   irPara('tela-login');
 }
@@ -117,226 +106,390 @@ function togglePin() {
 }
 
 // ============================================================
-//  TELA SCAN
+//  TELA PRINCIPAL (main) — bifurca por perfil
 // ============================================================
-function iniciarTelaScan() {
+async function iniciarTelaMain() {
   if (!operadorLogado) { irPara('tela-login'); return; }
 
-  // Exibe processo fixo
-  document.getElementById('scan-processo-badge').textContent = operadorLogado.processo;
-  document.getElementById('processo-fixo').textContent = operadorLogado.processo;
+  opSelecionada = null;
+  fecharCamera();
 
-  // Limpa campos
-  document.getElementById('qr-input').value = '';
-  document.getElementById('scan-obs').value = '';
-  document.getElementById('scan-feedback').classList.add('hidden');
-  esconderDadosQR();
-  selecionarStatus('I');
-
-  // Foca input para scanner externo
-  setTimeout(() => document.getElementById('qr-input').focus(), 300);
-}
-
-function selecionarStatus(s) {
-  statusSelecionado = s;
-  document.getElementById('btn-iniciado').classList.toggle('ativo', s === 'I');
-  document.getElementById('btn-finalizado').classList.toggle('ativo', s === 'F');
-}
-
-// ─── Parse do QR ──────────────────────────────────────────
-// Formato esperado: 3762@7898641420904@12@OP=OP@Código@Qtde
-function processarQR(raw) {
-  raw = raw.trim();
-  if (!raw) return;
-
-  const partes = raw.split('@');
-  if (partes.length < 3) {
-    mostrarFeedback('QR Code inválido. Formato esperado: OP@Código@Qtde', 'erro');
-    return;
+  if (operadorLogado.isPCP) {
+    mostrarSecaoPCP();
+  } else {
+    await mostrarSecaoSetor();
   }
+}
 
-  qrDados = {
-    raw,
-    op:     partes[0],
-    codigo: partes[1],
-    qtde:   partes[2]
-  };
+// ─── PCP ──────────────────────────────────────────────────
+function mostrarSecaoPCP() {
+  document.getElementById('secao-pcp').classList.remove('hidden');
+  document.getElementById('secao-setor').classList.add('hidden');
+  limparFormPCP();
+}
 
-  document.getElementById('dado-op').textContent      = qrDados.op;
-  document.getElementById('dado-codigo').textContent  = qrDados.codigo;
-  document.getElementById('dado-qtde').textContent    = qrDados.qtde;
-  document.getElementById('dado-descricao').textContent = '...buscando...';
+function limparFormPCP() {
+  document.getElementById('pcp-qr').value   = '';
+  document.getElementById('pcp-op').value   = '';
+  document.getElementById('pcp-cod').value  = '';
+  document.getElementById('pcp-qtde').value = '';
+  document.getElementById('pcp-obs').value  = '';
+  document.getElementById('pcp-descricao').textContent = '';
+}
 
-  document.getElementById('qr-dados').classList.remove('hidden');
-
-  // Busca descrição (opcional — o backend faz o PROCX)
-  document.getElementById('dado-descricao').textContent = '(será buscado ao salvar)';
-
+async function processarQRPCP(raw) {
+  raw = (raw || '').trim();
+  if (!raw) return;
+  const partes = raw.split('@');
+  document.getElementById('pcp-op').value   = partes[0]  || '';
+  document.getElementById('pcp-cod').value  = partes[1]  || '';
+  document.getElementById('pcp-qtde').value = partes[2]  || '';
+  document.getElementById('pcp-descricao').textContent = '...';
   fecharCamera();
 }
 
-function esconderDadosQR() {
-  qrDados = null;
-  document.getElementById('qr-dados').classList.add('hidden');
-  document.getElementById('qr-input').value = '';
+async function lancarOP() {
+  const op     = document.getElementById('pcp-op').value.trim();
+  const codigo = document.getElementById('pcp-cod').value.trim();
+  const qtde   = document.getElementById('pcp-qtde').value.trim();
+  const obs    = document.getElementById('pcp-obs').value.trim();
+  const qrcode = document.getElementById('pcp-qr').value.trim();
+
+  if (!op) { mostrarModal('⚠️', 'Informe a OP.'); return; }
+
+  mostrarLoading(true);
+  try {
+    const resp = await apiPost({
+      action: 'lancarOP',
+      operadorNome: operadorLogado.nome,
+      op, codigo, qtde, obs, qrcode
+    });
+    mostrarModal('✅',
+      `OP ${resp.op} lançada!\n` +
+      `${resp.descricao ? resp.descricao + '\n' : ''}` +
+      `Custódia: ${resp.custodia}`
+    );
+    limparFormPCP();
+  } catch (e) {
+    mostrarModal('❌', e.message);
+  } finally {
+    mostrarLoading(false);
+  }
 }
 
-// ─── Câmera ───────────────────────────────────────────────
+// ─── SETOR (receber / rejeitar) ───────────────────────────
+async function mostrarSecaoSetor() {
+  document.getElementById('secao-pcp').classList.add('hidden');
+  document.getElementById('secao-setor').classList.remove('hidden');
+
+  document.getElementById('setor-recebeDE').textContent =
+    operadorLogado.recebeDE || '—';
+
+  // Mostra botão rejeitar só se o setor pode rejeitar
+  const podRejeitar = operadorLogado.podeRejeitarPara.length > 0;
+  document.getElementById('btn-rejeitar').classList.toggle('hidden', !podRejeitar);
+
+  await carregarOPsDisponiveis();
+}
+
+async function carregarOPsDisponiveis() {
+  const lista = document.getElementById('ops-lista');
+  lista.innerHTML = '<div class="ops-loading">Carregando OPs...</div>';
+  opSelecionada = null;
+  atualizarBotoesAcao();
+
+  try {
+    opsDisponiveis = await apiGet('getOPsDisponiveis', { setor: operadorLogado.setor });
+    renderizarOPs(opsDisponiveis);
+  } catch (e) {
+    lista.innerHTML = '<div class="ops-loading">Erro ao carregar OPs.</div>';
+  }
+}
+
+function renderizarOPs(ops) {
+  const lista = document.getElementById('ops-lista');
+  if (!ops || ops.length === 0) {
+    lista.innerHTML = `
+      <div class="ops-vazia">
+        <div class="ops-vazia-icon">📭</div>
+        <div>Nenhuma OP disponível em ${operadorLogado.recebeDE || '—'}</div>
+      </div>`;
+    return;
+  }
+
+  lista.innerHTML = ops.map(op => `
+    <div class="op-item" onclick="selecionarOP('${op.op}')" id="op-item-${op.op}">
+      <div class="op-item-header">
+        <span class="op-item-num">OP ${op.op}</span>
+        <span class="op-item-qtde">Qtde: ${op.qtde || '—'}</span>
+      </div>
+      <div class="op-item-cod">${op.codigo || ''}</div>
+      <div class="op-item-desc">${op.descricao || ''}</div>
+      <div class="op-item-custodia">📍 ${op.custodia}</div>
+    </div>`
+  ).join('');
+}
+
+function selecionarOP(opNum) {
+  opSelecionada = opsDisponiveis.find(o => o.op.toString() === opNum.toString());
+
+  // Destaca visualmente
+  document.querySelectorAll('.op-item').forEach(el => el.classList.remove('selecionada'));
+  document.getElementById('op-item-' + opNum)?.classList.add('selecionada');
+
+  atualizarBotoesAcao();
+
+  // Se veio do QR, limpa o input
+  const qrInput = document.getElementById('setor-qr');
+  if (qrInput) qrInput.value = '';
+}
+
+function processarQR(raw) {
+  raw = (raw || '').trim();
+  if (!raw) return;
+  fecharCamera();
+
+  if (operadorLogado.isPCP) {
+    document.getElementById('pcp-qr').value = raw;
+    processarQRPCP(raw);
+    return;
+  }
+
+  // Para outros setores: extrai OP do QR e seleciona na lista
+  const partes = raw.split('@');
+  const op     = partes[0];
+
+  const encontrada = opsDisponiveis.find(o => o.op.toString() === op.toString());
+  if (encontrada) {
+    selecionarOP(op);
+    mostrarToast('✅ OP ' + op + ' selecionada!');
+  } else {
+    mostrarToast('⚠️ OP ' + op + ' não está disponível para ' + operadorLogado.setor, true);
+  }
+}
+
+function atualizarBotoesAcao() {
+  const temOP = !!opSelecionada;
+  document.getElementById('btn-receber').disabled   = !temOP;
+  document.getElementById('btn-rejeitar').disabled  = !temOP;
+}
+
+async function receberOP() {
+  if (!opSelecionada) return;
+  mostrarLoading(true);
+  try {
+    const resp = await apiPost({
+      action:       'receberOP',
+      operadorNome: operadorLogado.nome,
+      setor:        operadorLogado.setor,
+      op:           opSelecionada.op,
+      qrcode:       document.getElementById('setor-qr')?.value || ''
+    });
+    mostrarModal('✅',
+      `OP ${resp.op} recebida!\n` +
+      `${resp.descricao ? resp.descricao + '\n' : ''}` +
+      `Custódia: ${resp.custodia}` +
+      `${resp.proximoSetor ? '\nPróximo: ' + resp.proximoSetor : ''}`
+    );
+    await carregarOPsDisponiveis();
+  } catch (e) {
+    mostrarModal('❌', e.message);
+  } finally {
+    mostrarLoading(false);
+  }
+}
+
+function abrirModalRejeitar() {
+  if (!opSelecionada) return;
+
+  // Popula opções de destino
+  const sel = document.getElementById('rejeitar-destino');
+  sel.innerHTML = operadorLogado.podeRejeitarPara.map(d =>
+    `<option value="${d}">${d}</option>`
+  ).join('');
+  document.getElementById('rejeitar-motivo').value = '';
+  document.getElementById('modal-rejeitar').classList.remove('hidden');
+}
+
+async function confirmarRejeicao() {
+  const destino = document.getElementById('rejeitar-destino').value;
+  const motivo  = document.getElementById('rejeitar-motivo').value.trim();
+
+  if (!motivo) { mostrarToast('⚠️ Informe o motivo da rejeição.', true); return; }
+
+  fecharModalRejeitar();
+  mostrarLoading(true);
+  try {
+    const resp = await apiPost({
+      action:       'rejeitarOP',
+      operadorNome: operadorLogado.nome,
+      setor:        operadorLogado.setor,
+      op:           opSelecionada.op,
+      destino,
+      motivo
+    });
+    mostrarModal('↩️',
+      `OP ${resp.op} rejeitada!\n` +
+      `Enviada para: ${resp.custodia}\n` +
+      `Motivo: ${motivo}`
+    );
+    await carregarOPsDisponiveis();
+  } catch (e) {
+    mostrarModal('❌', e.message);
+  } finally {
+    mostrarLoading(false);
+  }
+}
+
+function fecharModalRejeitar() {
+  document.getElementById('modal-rejeitar').classList.add('hidden');
+}
+
+// ============================================================
+//  CÂMERA
+// ============================================================
 async function abrirCamera() {
-  // Carrega jsQR dinamicamente se necessário
   if (!jsQRLoaded) {
     await carregarScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js');
     jsQRLoaded = true;
   }
-
   try {
-    streamCamera = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' }
-    });
-    const video = document.getElementById('camera-video');
-    video.srcObject = streamCamera;
+    streamCamera = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    document.getElementById('camera-video').srcObject = streamCamera;
     document.getElementById('camera-container').classList.remove('hidden');
     escanearFrames();
   } catch (e) {
-    mostrarModal('❌', 'Não foi possível acessar a câmera. Verifique as permissões.');
+    mostrarModal('❌', 'Não foi possível acessar a câmera.');
   }
 }
 
 function fecharCamera() {
-  if (streamCamera) {
-    streamCamera.getTracks().forEach(t => t.stop());
-    streamCamera = null;
-  }
-  document.getElementById('camera-container').classList.add('hidden');
+  if (streamCamera) { streamCamera.getTracks().forEach(t => t.stop()); streamCamera = null; }
+  document.getElementById('camera-container')?.classList.add('hidden');
 }
 
 function escanearFrames() {
-  const video   = document.getElementById('camera-video');
-  const canvas  = document.createElement('canvas');
-  const ctx     = canvas.getContext('2d');
-
+  const video  = document.getElementById('camera-video');
+  const canvas = document.createElement('canvas');
+  const ctx    = canvas.getContext('2d');
   function tick() {
     if (!streamCamera) return;
     if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      canvas.width  = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+      const img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(img.data, img.width, img.height);
-      if (code) {
-        document.getElementById('qr-input').value = code.data;
-        processarQR(code.data);
-        return; // para o loop
-      }
+      if (code) { processarQR(code.data); return; }
     }
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
 }
 
-// ─── Salvar ───────────────────────────────────────────────
-async function salvarRegistro() {
-  if (!qrDados) {
-    mostrarFeedback('Bipe ou digite um QR Code primeiro.', 'erro');
-    return;
-  }
-  if (!operadorLogado) { irPara('tela-login'); return; }
-
-  const obs = document.getElementById('scan-obs').value.trim();
-  const payload = {
-    action:        'registrarFluxo',
-    operadorId:    operadorLogado.id,
-    operadorNome:  operadorLogado.nome,
-    processo:      operadorLogado.processo,
-    qrcode:        qrDados.raw,
-    op:            qrDados.op,
-    codigo:        qrDados.codigo,
-    qtde:          qrDados.qtde,
-    status:        statusSelecionado,
-    obs
-  };
-
-  const btnTxt = document.getElementById('btn-salvar-txt');
-  btnTxt.textContent = 'SALVANDO...';
-  mostrarLoading(true);
-
-  try {
-    const resp = await apiPost(payload);
-    mostrarModal('✅', `Registrado com sucesso!\nOP: ${qrDados.op}\nDescrição: ${resp.descricao || '-'}`);
-    // Limpa para próxima leitura
-    esconderDadosQR();
-    document.getElementById('scan-obs').value = '';
-    setTimeout(() => document.getElementById('qr-input').focus(), 400);
-  } catch (e) {
-    mostrarModal('❌', 'Erro ao salvar: ' + (e.message || 'Verifique a conexão.'));
-  } finally {
-    mostrarLoading(false);
-    btnTxt.textContent = 'SALVAR REGISTRO';
-  }
-}
-
 // ============================================================
-//  FLUXO STATUS
+//  TELA STATUS (visão geral)
 // ============================================================
-const PROCESSOS_LABELS = ['PCP','ESTOQUE','PRODUÇÃO','QUALIDADE','CONSOLIDAÇÃO','EXPEDIDO','PA','RESERVA'];
+let statusData = [];
 
 async function carregarStatus() {
   const lista = document.getElementById('status-lista');
-  lista.innerHTML = '<div class="carregando">Carregando...</div>';
+  lista.innerHTML = '<div class="ops-loading">Carregando...</div>';
   try {
     statusData = await apiGet('getFluxoStatus');
     renderizarStatus(statusData);
   } catch (e) {
-    lista.innerHTML = '<div class="carregando">Erro ao carregar dados.</div>';
+    lista.innerHTML = '<div class="ops-loading">Erro ao carregar.</div>';
   }
 }
 
 function filtrarStatus() {
-  const termo = document.getElementById('busca-op').value.toLowerCase();
-  const filtrado = statusData.filter(row =>
-    row['OP']?.toString().toLowerCase().includes(termo) ||
-    row['Código']?.toString().toLowerCase().includes(termo) ||
-    row['Descrição']?.toString().toLowerCase().includes(termo)
-  );
-  renderizarStatus(filtrado);
+  const t = document.getElementById('busca-op').value.toLowerCase();
+  renderizarStatus(statusData.filter(r =>
+    r['OP']?.toString().toLowerCase().includes(t) ||
+    r['Código']?.toString().toLowerCase().includes(t) ||
+    r['Descrição']?.toString().toLowerCase().includes(t) ||
+    r['Custódia']?.toString().toLowerCase().includes(t)
+  ));
 }
+
+const COR_SETOR = {
+  'PCP': '#7B1FA2', 'ESTOQUE': '#1565C0', 'PRODUÇÃO': '#E65100',
+  'QUALIDADE': '#2E7D32', 'CONSOLIDAÇÃO': '#00838F',
+  'EXPEDIDO': '#558B2F', 'PA': '#4527A0', 'RESERVA': '#6D4C41'
+};
 
 function renderizarStatus(dados) {
   const lista = document.getElementById('status-lista');
   if (!dados || dados.length === 0) {
-    lista.innerHTML = '<div class="carregando">Nenhum registro encontrado.</div>';
+    lista.innerHTML = '<div class="ops-vazia"><div class="ops-vazia-icon">📭</div><div>Nenhuma OP encontrada.</div></div>';
     return;
   }
-
-  lista.innerHTML = dados.map(row => {
-    const processosCells = PROCESSOS_LABELS.map(p => {
-      const val = row[p] || '';
-      const cls = val === 'I' ? 'iniciado' : val === 'F' ? 'finalizado' : '';
-      const ico = val === 'I' ? '▶' : val === 'F' ? '✓' : '·';
-      return `
-        <div class="proc-cell ${cls}">
-          <span class="proc-cell-nome">${p}</span>
-          <span class="proc-cell-status">${ico}</span>
-        </div>`;
-    }).join('');
-
+  lista.innerHTML = dados.map(r => {
+    const cor = COR_SETOR[r['Custódia']?.toString().toUpperCase()] || '#455A64';
     return `
-      <div class="op-card">
-        <div class="op-card-header">
-          <span class="op-numero">OP ${row['OP'] || ''}</span>
-          <span class="op-codigo">${row['Código'] || ''}</span>
+      <div class="status-card" onclick="verHistorico('${r['OP']}')">
+        <div class="status-card-top" style="border-left: 4px solid ${cor}">
+          <div>
+            <div class="status-op">OP ${r['OP']}</div>
+            <div class="status-cod">${r['Código'] || ''}</div>
+            <div class="status-desc">${r['Descrição'] || ''}</div>
+          </div>
+          <div class="status-right">
+            <div class="status-badge" style="background:${cor}">${r['Custódia'] || '—'}</div>
+            <div class="status-qtde">Qtde: ${r['Qtde'] || '—'}</div>
+          </div>
         </div>
-        <div class="op-descricao">${row['Descrição'] || ''}</div>
-        <div class="op-processos">${processosCells}</div>
+        <div class="status-footer">
+          👤 ${r['Último Operador'] || '—'} &nbsp;·&nbsp;
+          🕐 ${formatarData(r['Última Atualização'])}
+        </div>
       </div>`;
   }).join('');
+}
+
+async function verHistorico(op) {
+  mostrarLoading(true);
+  try {
+    const hist = await apiGet('getHistoricoOP', { op });
+    const html = hist.length === 0
+      ? '<p>Sem histórico.</p>'
+      : hist.map(h => `
+          <div class="hist-item hist-${(h['Ação']||'').toLowerCase()}">
+            <div class="hist-acao">${iconeAcao(h['Ação'])} ${h['Ação']}</div>
+            <div class="hist-detalhe">${h['Custódia De'] || '—'} → ${h['Custódia Até'] || '—'}</div>
+            <div class="hist-meta">👤 ${h['Operador']} · 🕐 ${formatarData(h['Data'])}</div>
+            ${h['OBS'] ? `<div class="hist-obs">💬 ${h['OBS']}</div>` : ''}
+          </div>`
+        ).join('');
+
+    document.getElementById('modal-hist-op').textContent  = 'OP ' + op;
+    document.getElementById('modal-hist-body').innerHTML  = html;
+    document.getElementById('modal-historico').classList.remove('hidden');
+  } catch (e) {
+    mostrarModal('❌', e.message);
+  } finally {
+    mostrarLoading(false);
+  }
+}
+
+function fecharModalHistorico() {
+  document.getElementById('modal-historico').classList.add('hidden');
+}
+
+function iconeAcao(acao) {
+  if (!acao) return '·';
+  acao = acao.toUpperCase();
+  if (acao === 'LANÇAMENTO')  return '🚀';
+  if (acao === 'RECEBIMENTO') return '✅';
+  if (acao === 'REJEIÇÃO')    return '↩️';
+  return '·';
 }
 
 // ============================================================
 //  API HELPERS
 // ============================================================
 async function apiGet(action, params = {}) {
-  const qs = new URLSearchParams({ action, ...params }).toString();
+  const qs   = new URLSearchParams({ action, ...params }).toString();
   const resp = await fetch(`${API_URL}?${qs}`);
   const json = await resp.json();
   if (json.status !== 'ok') throw new Error(json.message || 'Erro na API');
@@ -344,10 +497,7 @@ async function apiGet(action, params = {}) {
 }
 
 async function apiPost(body) {
-  const resp = await fetch(API_URL, {
-    method: 'POST',
-    body: JSON.stringify(body)
-  });
+  const resp = await fetch(API_URL, { method: 'POST', body: JSON.stringify(body) });
   const json = await resp.json();
   if (json.status !== 'ok') throw new Error(json.message || 'Erro na API');
   return json.data;
@@ -356,7 +506,10 @@ async function apiPost(body) {
 // ============================================================
 //  UI HELPERS
 // ============================================================
-function mostrarModal(icon, msg) {
+let modalCallback = null;
+
+function mostrarModal(icon, msg, callback) {
+  modalCallback = callback || null;
   document.getElementById('modal-icon').textContent = icon;
   document.getElementById('modal-msg').textContent  = msg;
   document.getElementById('modal-overlay').classList.remove('hidden');
@@ -364,18 +517,33 @@ function mostrarModal(icon, msg) {
 
 function fecharModal() {
   document.getElementById('modal-overlay').classList.add('hidden');
+  if (modalCallback) { modalCallback(); modalCallback = null; }
 }
 
-function mostrarFeedback(msg, tipo) {
-  const el = document.getElementById('scan-feedback');
-  el.textContent = msg;
-  el.className = `scan-feedback ${tipo}`;
-  el.classList.remove('hidden');
-  setTimeout(() => el.classList.add('hidden'), 3500);
+function mostrarToast(msg, erro = false) {
+  let toast = document.getElementById('toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.className   = 'toast ' + (erro ? 'toast-erro' : 'toast-ok');
+  toast.classList.remove('hidden');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.add('hidden'), 3000);
 }
 
 function mostrarLoading(ativo) {
   document.getElementById('loading').classList.toggle('hidden', !ativo);
+}
+
+function formatarData(val) {
+  if (!val) return '—';
+  try {
+    const d = new Date(val);
+    return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  } catch { return val; }
 }
 
 function carregarScript(src) {
