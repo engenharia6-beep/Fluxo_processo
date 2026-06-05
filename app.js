@@ -5,17 +5,23 @@ const API = 'https://script.google.com/macros/s/AKfycbwrZjdIKTpNdneierfTXhDosahk
 
 // Setores que operam no app
 // seqVe = Seq que este setor vê | seqGrava = Seq que grava ao confirmar
+// pcp: true = vê todas as OPs de todos os setores e pode bipar qualquer uma
 const SETORES_APP = [
-  { nome: 'PRODUÇÃO',     seqVe: 1, seqGrava: 2 },
-  { nome: 'QUALIDADE',    seqVe: 2, seqGrava: 3 },
-  { nome: 'CONSOLIDAÇÃO', seqVe: 3, seqGrava: 4 },
-  { nome: 'EXPEDIDO',     seqVe: 4, seqGrava: 5 },
-  { nome: 'P.A',          seqVe: 5, seqGrava: 6 },
+  { nome: 'PCP',          pcp: true               },
+  { nome: 'PRODUÇÃO',     seqVe: 1, seqGrava: 2  },
+  { nome: 'QUALIDADE',    seqVe: 2, seqGrava: 3  },
+  { nome: 'CONSOLIDAÇÃO', seqVe: 3, seqGrava: 4  },
+  { nome: 'EXPEDIDO',     seqVe: 4, seqGrava: 5  },
+  { nome: 'P.A',          seqVe: 5, seqGrava: 6  },
 ];
 
 function getConfigSetor(setor) {
   const nome = String(setor).trim().toUpperCase().replace(/^\d+-/, '');
   return SETORES_APP.find(s => s.nome.toUpperCase() === nome) || null;
+}
+
+function isPCP() {
+  return !!(getConfigSetor(estado.operador?.setor)?.pcp);
 }
 
 // ============================================================
@@ -182,8 +188,10 @@ function selecionarOP(opNum) {
 function atualizarBotoes() {
   const temSelecionada = !!estado.opSelecionada;
   $('btn-receber').disabled  = !temSelecionada;
+  // PCP pode bipar tudo; outros setores só rejeitam a partir do seq 2
   const cfg = getConfigSetor(estado.operador.setor);
-  $('btn-rejeitar').disabled = !temSelecionada || !cfg || cfg.seqGrava <= 2;
+  const podeRejeitar = temSelecionada && (isPCP() || (cfg && cfg.seqGrava > 2));
+  $('btn-rejeitar').disabled = !podeRejeitar;
 }
 
 // ============================================================
@@ -249,9 +257,11 @@ function abrirModalRejeitar() {
   $('mj-obs').value      = '';
   estado.setorDestino    = null;
 
-  // Montar destinos possíveis (setores anteriores ao atual)
+  // PCP pode enviar para qualquer setor; outros só para setores anteriores
   const cfgAtual = getConfigSetor(estado.operador.setor);
-  const destinos = cfgAtual ? SETORES_APP.filter(s => s.seqGrava < cfgAtual.seqGrava) : [];
+  const destinos = isPCP()
+    ? SETORES_APP.filter(s => !s.pcp)
+    : (cfgAtual ? SETORES_APP.filter(s => !s.pcp && s.seqGrava < cfgAtual.seqGrava) : []);
 
   $('mj-destinos').innerHTML = destinos.map(s => `
     <button class="rejeitar-op-btn" onclick="selecionarDestino('${s.nome}', this)">
