@@ -1,0 +1,25 @@
+{
+  "name": "SIF – Fluxo Produtivo",
+  "short_name": "SIF",
+  "description": "Sistema de Produção Futura – Fluxo Produtivo",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0A6E6E",
+  "theme_color": "#0A6E6E",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
