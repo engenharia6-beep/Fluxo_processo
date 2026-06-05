@@ -1,6 +1,6 @@
 {
   "name": "SIF – Fluxo Produtivo",
-  "short_name": "SIF",
+  "short_name": "Fluxo Produtivo",
   "description": "Sistema de Produção Futura – Fluxo Produtivo",
   "start_url": "./index.html",
   "display": "standalone",
