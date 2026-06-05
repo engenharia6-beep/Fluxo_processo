@@ -66,59 +66,22 @@ async function api(params, body = null) {
 // ============================================================
 // LOGIN
 // ============================================================
-async function iniciarLogin() {
-  loading(true, 'CARREGANDO OPERADORES...');
-  try {
-    const data = await api({ acao: 'getOperadores' });
-    const lista = $('lista-operadores');
-    lista.innerHTML = '';
-
-    if (!data.operadores || !data.operadores.length) {
-      lista.innerHTML = '<div class="select-item" style="color:var(--danger)">Nenhum operador cadastrado</div>';
-      return;
-    }
-
-    data.operadores.forEach(op => {
-      const item = document.createElement('div');
-      item.className = 'select-item';
-      item.textContent = `${op.nome} — ${op.setor}`;
-      item.dataset.id    = op.id;
-      item.dataset.nome  = op.nome;
-      item.dataset.setor = op.setor;
-      item.addEventListener('click', () => selecionarOperador(item, op));
-      lista.appendChild(item);
-    });
-  } catch(e) {
-    toast('Erro ao carregar operadores', 'erro');
-  } finally {
-    loading(false);
-  }
-}
-
-let operadorSelecionado = null;
-
-function selecionarOperador(el, op) {
-  document.querySelectorAll('#lista-operadores .select-item').forEach(i => i.classList.remove('selecionado'));
-  el.classList.add('selecionado');
-  operadorSelecionado = op;
-  $('campo-pin').focus();
-  atualizarBtnLogin();
-}
-
 function atualizarBtnLogin() {
-  $('btn-login').disabled = !(operadorSelecionado && $('campo-pin').value.length >= 4);
+  const nome = $('campo-nome').value.trim();
+  const pin  = $('campo-pin').value.trim();
+  $('btn-login').disabled = !(nome.length >= 2 && pin.length >= 4);
 }
 
 async function fazerLogin() {
-  if (!operadorSelecionado) return;
-  const pin = $('campo-pin').value.trim();
-  if (!pin) return;
+  const nome = $('campo-nome').value.trim();
+  const pin  = $('campo-pin').value.trim();
+  if (!nome || !pin) return;
 
   loading(true, 'AUTENTICANDO...');
   $('login-erro').style.display = 'none';
 
   try {
-    const data = await api({}, { acao: 'login', nome: operadorSelecionado.nome, pin });
+    const data = await api({}, { acao: 'login', nome, pin });
     if (data.status === 'ok') {
       estado.operador = data.operador;
       entrarNaPrincipal();
@@ -346,19 +309,18 @@ async function confirmarRejeitar() {
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
   // Login
-  iniciarLogin();
-
+  $('campo-nome').addEventListener('input', atualizarBtnLogin);
   $('campo-pin').addEventListener('input', atualizarBtnLogin);
+  $('campo-nome').addEventListener('keydown', e => { if (e.key === 'Enter') $('campo-pin').focus(); });
   $('campo-pin').addEventListener('keydown', e => { if (e.key === 'Enter') fazerLogin(); });
   $('btn-login').addEventListener('click', fazerLogin);
 
   // Principal
   $('btn-sair').addEventListener('click', () => {
     estado = { operador: null, ops: [], opsFiltradas: [], opSelecionada: null, setorDestino: null };
-    operadorSelecionado = null;
-    $('campo-pin').value = '';
+    $('campo-nome').value = '';
+    $('campo-pin').value  = '';
     $('btn-login').disabled = true;
-    document.querySelectorAll('#lista-operadores .select-item').forEach(i => i.classList.remove('selecionado'));
     mostrarTela('tela-login');
   });
 
