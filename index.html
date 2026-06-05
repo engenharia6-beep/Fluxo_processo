@@ -299,6 +299,24 @@
     color: var(--text);
   }
   .op-qtde span { color: var(--text2); font-size: 11px; }
+  .op-body {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 10px;
+  }
+  .op-foto {
+    width: 64px;
+    height: 64px;
+    object-fit: contain;
+    border-radius: 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .op-info { flex: 1; min-width: 0; }
+  .op-desc { margin-bottom: 0; }
+
   .op-setor-atual {
     font-family: var(--mono);
     font-size: 11px;
