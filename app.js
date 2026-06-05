@@ -10,7 +10,7 @@ const SETORES_APP = [
   { nome: 'PCP',          pcp: true               },
   { nome: 'PRODUÇÃO',     seqVe: 1, seqGrava: 2  },
   { nome: 'QUALIDADE',    seqVe: 2, seqGrava: 3  },
-  { nome: 'CONSOLIDAÇÃO', seqVe: 3, seqGrava: 4  },
+  { nome: 'CONSOLIDAÇÃO', seqVe: 3, seqGrava: 4, destinoLivre: true, destinos: ['EXPEDIDO', 'P.A'] },
   { nome: 'EXPEDIDO',     seqVe: 4, seqGrava: 5  },
   { nome: 'P.A',          seqVe: 5, seqGrava: 6  },
 ];
@@ -206,7 +206,30 @@ function abrirModalReceber() {
   $('mr-pedido').textContent  = op.pedido || '—';
   $('mr-cliente').textContent = op.cliente || '—';
   $('mr-obs').value           = '';
+  estado.destinoReceber       = null;
+
+  // CONSOLIDAÇÃO escolhe destino ao receber
+  const cfg = getConfigSetor(estado.operador.setor);
+  const destDiv = $('mr-destinos');
+  if (cfg && cfg.destinoLivre && cfg.destinos) {
+    destDiv.style.display = 'block';
+    destDiv.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Enviar para:</div>' +
+      cfg.destinos.map(d => `
+        <button class="rejeitar-op-btn" onclick="selecionarDestinoReceber('${d}', this)">${d}</button>
+      `).join('');
+  } else {
+    destDiv.style.display = 'none';
+    destDiv.innerHTML = '';
+    estado.destinoReceber = cfg ? cfg.destinos?.[0] || '' : '';
+  }
+
   $('modal-receber').classList.add('ativo');
+}
+
+function selecionarDestinoReceber(destino, el) {
+  estado.destinoReceber = destino;
+  document.querySelectorAll('#mr-destinos .rejeitar-op-btn').forEach(b => b.classList.remove('selecionado'));
+  el.classList.add('selecionado');
 }
 
 function fecharModalReceber() {
@@ -221,6 +244,13 @@ async function confirmarReceber() {
   fecharModalReceber();
 
   try {
+    const cfg = getConfigSetor(estado.operador.setor);
+    if (cfg && cfg.destinoLivre && !estado.destinoReceber) {
+      loading(false);
+      toast('Selecione o destino antes de confirmar', 'erro');
+      $('modal-receber').classList.add('ativo');
+      return;
+    }
     const data = await api({}, {
       acao:      'receberOP',
       op:        op.op,
@@ -229,6 +259,8 @@ async function confirmarReceber() {
       pedido:    op.pedido,
       setor:     estado.operador.setor,
       operador:  estado.operador.nome,
+      destino:   estado.destinoReceber || '',
+      origem:    op.statusAtual || '',
       obs:       $('mr-obs').value.trim()
     });
 
