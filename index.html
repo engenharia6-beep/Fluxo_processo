@@ -3,6 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0A6E6E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SIF">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>SIF – Fluxo Produtivo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -238,6 +245,27 @@
     color: var(--login-muted);
     font-family: var(--mono);
   }
+  .btn-instalar {
+    display: none;
+    width: 100%;
+    background: none;
+    border: 1px solid var(--login-border);
+    border-radius: 10px;
+    padding: 11px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--login-teal);
+    font-family: var(--sans);
+    cursor: pointer;
+    margin-top: 10px;
+    transition: background .2s, border-color .2s;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn-instalar.visivel { display: flex; }
+  .btn-instalar:hover { background: rgba(10,110,110,0.06); border-color: var(--login-teal); }
+  .install-icon { font-size: 16px; }
 
   /* ── TELA PRINCIPAL ── */
   #tela-principal { background: #EDF6F4; }
@@ -677,6 +705,9 @@
 
     <button class="btn-primario" id="btn-login" disabled>ENTRAR</button>
     <div id="login-erro" style="color:#cc2200;font-size:13px;text-align:center;margin-top:12px;font-family:var(--mono);display:none"></div>
+    <button class="btn-instalar" id="btn-instalar">
+      <span class="install-icon">⬇</span> Instalar app
+    </button>
     <div class="login-footer">Futura Outsourcing © 2026</div>
   </div>
 </div>
@@ -765,5 +796,48 @@
 </div>
 
 <script src="app.js"></script>
+<script>
+  // ── PWA: Service Worker ──
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW erro:', err));
+    });
+  }
+
+  // ── PWA: Prompt de instalação ──
+  let deferredPrompt = null;
+  const btnInstalar = document.getElementById('btn-instalar');
+
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    btnInstalar.classList.add('visivel');
+  });
+
+  btnInstalar.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    if (outcome === 'accepted') btnInstalar.classList.remove('visivel');
+  });
+
+  // Ocultar botão se já instalado
+  window.addEventListener('appinstalled', () => {
+    btnInstalar.classList.remove('visivel');
+    deferredPrompt = null;
+  });
+
+  // iOS: mostrar instrução diferente (não tem beforeinstallprompt)
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone;
+  if (isIOS && !isStandalone) {
+    btnInstalar.textContent = '⬆ Adicionar à tela inicial';
+    btnInstalar.classList.add('visivel');
+    btnInstalar.addEventListener('click', () => {
+      alert('No Safari: toque em Compartilhar (□↑) e depois "Adicionar à Tela de Início".');
+    }, { once: true });
+  }
+</script>
 </body>
 </html>
