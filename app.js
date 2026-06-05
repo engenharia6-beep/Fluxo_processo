@@ -154,11 +154,16 @@ function renderizarLista() {
         <div class="op-numero">${op.op}</div>
         <div class="op-pedido">PED ${op.pedido || '—'}</div>
       </div>
-      <div class="op-codigo">${op.codigo}</div>
-      <div class="op-desc">${op.descricao || '—'}</div>
+      <div class="op-body">
+        ${op.foto ? `<img class="op-foto" src="${op.foto}" alt="${op.codigo}" onerror="this.style.display='none'">` : ''}
+        <div class="op-info">
+          <div class="op-codigo">${op.codigo}</div>
+          <div class="op-desc">${op.descricao || '—'}</div>
+        </div>
+      </div>
       <div class="op-footer">
         <div class="op-qtde">${op.qtde} <span>UN</span></div>
-        <div class="op-setor-atual">${op.setorAtual}</div>
+        <div class="op-setor-atual">${op.statusAtual}</div>
       </div>
     </div>
   `).join('');
