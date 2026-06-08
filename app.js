@@ -310,7 +310,7 @@ function entrarProducaoDiaria() {
   estado.pd = { processo: null, opSelecionada: null, ops: [], insumos: [], insumoSelecionado: null };
   $('pd-hd-nome').textContent  = estado.operador.nome;
   $('pd-hd-setor').textContent = estado.operador.setor;
-  $('btn-pd-proximo').disabled = true;
+
   renderizarProcessos();
   mostrarTela('tela-pd');
   mostrarPasso('passo-processo');
@@ -505,7 +505,7 @@ function pdVoltar() {
   estado.pd.processo       = null;
   estado.pd.opSelecionada  = null;
   estado.pd.insumos        = [];
-  $('btn-pd-proximo').disabled = true;
+
   mostrarPasso('passo-processo');
   $('pd-processos').querySelectorAll('.pd-processo-btn').forEach(b => b.classList.remove('ativo'));
 }
