@@ -330,7 +330,7 @@ function renderizarProcessos() {
       estado.pd.processo = p;
       grid.querySelectorAll('.pd-processo-btn').forEach(b => b.classList.remove('ativo'));
       btn.classList.add('ativo');
-      $('btn-pd-proximo').disabled = false;
+      pdProximo();
     });
     grid.appendChild(btn);
   });
@@ -628,7 +628,6 @@ document.addEventListener('DOMContentLoaded', () => {
   $('modal-rejeitar').addEventListener('click', e => { if (e.target === $('modal-rejeitar')) fecharModalRejeitar(); });
 
   // Produção Diária — navegação
-  $('btn-pd-proximo').addEventListener('click', pdProximo);
   $('btn-pd-voltar').addEventListener('click', pdVoltar);
   $('btn-pd-voltar-insumo').addEventListener('click', pdVoltar);
   $('btn-pd-voltar-modulos').addEventListener('click', mostrarTelaModulos);
