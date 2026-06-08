@@ -575,13 +575,8 @@
       </div>
     </div>
 
-    <div style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px">
-
-      <!-- Lista de insumos -->
-      <div>
-        <div class="pd-section-label" style="padding:0;margin-bottom:8px">Selecione o insumo</div>
-        <div id="pi-insumos-lista" class="pi-insumos-lista"></div>
-      </div>
+    <!-- Lista de insumos — scroll livre -->
+    <div style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px">
 
       <!-- Insumo selecionado (confirmação visual) -->
       <div id="pi-codigo-wrap" style="display:none;background:#fff5ec;border:1.5px solid var(--accent2);border-radius:10px;padding:12px 14px;align-items:center;gap:12px">
@@ -592,22 +587,25 @@
         </div>
       </div>
 
-      <!-- Quantidade -->
+      <!-- Lista -->
       <div>
-        <div class="pd-section-label" style="padding:0;margin-bottom:8px">Quantidade</div>
-        <input class="ml-qtde-input" type="number" id="pi-qtde" placeholder="0" inputmode="numeric" min="1">
-      </div>
-
-      <!-- Observação -->
-      <div>
-        <div class="pd-section-label" style="padding:0;margin-bottom:8px">Observação</div>
-        <textarea class="modal-obs" id="pi-obs" placeholder="Opcional..." style="height:70px;margin-bottom:0"></textarea>
+        <div class="pd-section-label" style="padding:0;margin-bottom:8px">Selecione o insumo</div>
+        <div id="pi-insumos-lista" class="pi-insumos-lista"></div>
       </div>
 
     </div>
 
-    <div class="pd-bottom">
-      <button class="pd-btn-acao" id="btn-pi-salvar">✓ SALVAR</button>
+    <!-- Quantidade + Observação + Salvar — fixos no rodapé -->
+    <div style="background:var(--surface);border-top:1px solid var(--border);padding:14px 16px 20px;display:flex;flex-direction:column;gap:10px">
+      <div>
+        <div class="pd-section-label" style="padding:0;margin-bottom:6px">Quantidade</div>
+        <input class="ml-qtde-input" type="number" id="pi-qtde" placeholder="0" inputmode="numeric" min="1" style="margin-bottom:0">
+      </div>
+      <div>
+        <div class="pd-section-label" style="padding:0;margin-bottom:6px">Observação</div>
+        <textarea class="modal-obs" id="pi-obs" placeholder="Opcional..." style="height:60px;margin-bottom:0"></textarea>
+      </div>
+      <button class="pd-btn-acao" id="btn-pi-salvar" style="margin-top:4px">✓ SALVAR</button>
     </div>
   </div>
 </div>
