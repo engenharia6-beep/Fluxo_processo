@@ -501,9 +501,7 @@ async function salvarInsumo() {
   finally    { loading(false); }
 }
 
-// ============================================================
-// PRODUÇÃO DIÁRIA — TELA INSUMO (Foco / Preforma)
-// ============================================================
+function pdVoltar() {
   estado.pd.processo       = null;
   estado.pd.opSelecionada  = null;
   estado.pd.insumos        = [];
@@ -512,10 +510,9 @@ async function salvarInsumo() {
   $('pd-processos').querySelectorAll('.pd-processo-btn').forEach(b => b.classList.remove('ativo'));
 }
 
-function pdLancarComOP() {
-  if (!estado.pd.opSelecionada) { toast('Selecione uma OP', 'erro'); return; }
-  abrirModalLancamento();
-}
+// ============================================================
+// PRODUÇÃO DIÁRIA — TELA INSUMO (Foco / Preforma)
+// ============================================================
 
 // ============================================================
 // MODAL LANÇAMENTO (processos com OP)
