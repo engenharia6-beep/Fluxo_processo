@@ -344,21 +344,15 @@ function mostrarPasso(id) {
 async function pdProximo() {
   if (!estado.pd.processo) return;
   const cfg = PROCESSOS_CONFIG[estado.pd.processo];
-
-  // INSUMO (Foco/Preforma) → vai direto para tela de insumo
-  if (cfg.tipo === 'insumo') {
-    await entrarTelaInsumo();
-    return;
-  }
-
-  // OP → carrega lista de OPs
+  if (cfg.tipo === 'insumo') { await entrarTelaInsumo(); return; }
   loading(true, 'BUSCANDO OPs...');
   try {
     const data = await api({ acao: 'getOPsProducao' });
-    estado.pd.ops = data.status === 'ok' ? data.ops : [];
+    estado.pd.ops          = data.status === 'ok' ? data.ops : [];
+    estado.pd.opsFiltradas = [...estado.pd.ops];
     $('pd-processo-label').textContent = estado.pd.processo;
-    $('btn-pd-lancar').disabled = true;
-    estado.pd.opSelecionada = null;
+    $('pd-filtro-op').value = '';
+    $('pd-contador-ops').textContent = estado.pd.ops.length + ' OP' + (estado.pd.ops.length !== 1 ? 's' : '');
     renderizarOPsProducao();
     mostrarPasso('passo-op');
   } catch(e) { toast('Erro de conexão', 'erro'); }
@@ -366,8 +360,59 @@ async function pdProximo() {
 }
 
 // ============================================================
-// PRODUÇÃO DIÁRIA — TELA INSUMO (Foco / Preforma)
+// PRODUÇÃO DIÁRIA — PASSO 2: OP (processos com OP)
 // ============================================================
+function filtrarOPsProducao() {
+  const filtro = $('pd-filtro-op').value.trim().toLowerCase();
+  estado.pd.opsFiltradas = filtro
+    ? estado.pd.ops.filter(op =>
+        String(op.op).toLowerCase().includes(filtro) ||
+        String(op.pedido).toLowerCase().includes(filtro) ||
+        String(op.codigo).toLowerCase().includes(filtro))
+    : [...estado.pd.ops];
+  $('pd-contador-ops').textContent = estado.pd.opsFiltradas.length + ' OP' + (estado.pd.opsFiltradas.length !== 1 ? 's' : '');
+  renderizarOPsProducao();
+}
+
+function renderizarOPsProducao() {
+  const lista = $('pd-ops-lista');
+  const ops   = estado.pd.opsFiltradas || estado.pd.ops;
+  if (!ops.length) {
+    lista.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-txt">NENHUMA OP ENCONTRADA</div></div>`;
+    return;
+  }
+  lista.innerHTML = ops.map(op => {
+    const sp    = op.statusProducao;
+    const badge = sp === 'Iniciado'  ? '<span class="pd-badge azul">● EM ANDAMENTO</span>'
+                : sp === 'Concluído' ? '<span class="pd-badge verde">● CONCLUÍDO</span>'
+                : '<span class="pd-badge cinza">○ NÃO INICIADO</span>';
+    return `
+      <div class="pd-op-card" data-op="${op.op}">
+        <div class="op-header"><div class="op-numero">${op.op}</div>${badge}</div>
+        <div class="op-body">
+          ${op.foto ? `<img class="op-foto" src="${op.foto}" alt="${op.codigo}" onerror="this.style.display='none'">` : ''}
+          <div class="op-info">
+            <div class="op-codigo">${op.codigo}</div>
+            <div class="op-desc">${op.descricao || '—'}</div>
+          </div>
+        </div>
+        <div class="op-footer">
+          <div class="op-qtde">${op.qtde} <span>UN</span></div>
+          <div class="op-setor-atual">PED ${op.pedido || '—'}</div>
+        </div>
+      </div>`;
+  }).join('');
+  // Clicar já abre o modal diretamente
+  lista.querySelectorAll('.pd-op-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const op = ops.find(o => String(o.op) === card.dataset.op);
+      if (!op) return;
+      estado.pd.opSelecionada = op;
+      lista.querySelectorAll('.pd-op-card').forEach(c => c.classList.toggle('selecionado', c.dataset.op === card.dataset.op));
+      abrirModalLancamento();
+    });
+  });
+}
 async function entrarTelaInsumo() {
   const cfg = PROCESSOS_CONFIG[estado.pd.processo];
   loading(true, 'CARREGANDO INSUMOS...');
@@ -398,14 +443,20 @@ function renderizarInsumosLista() {
     item.className      = 'pi-insumo-item';
     item.dataset.codigo = ins.codigo;
     item.innerHTML = `
-      <div class="pi-insumo-codigo">${ins.codigo}</div>
-      <div class="pi-insumo-desc">${ins.descricao}</div>
-      ${ins.estoque !== undefined && ins.estoque !== '' ? `<div class="pi-insumo-estoque">Estoque: ${ins.estoque}</div>` : ''}`;
+      ${ins.foto ? `<img class="pi-insumo-foto" src="${ins.foto}" alt="${ins.codigo}" onerror="this.style.display='none'">` : ''}
+      <div class="pi-insumo-info">
+        <div class="pi-insumo-codigo">${ins.codigo}</div>
+        <div class="pi-insumo-desc">${ins.descricao}</div>
+        ${ins.estoque !== undefined && ins.estoque !== '' ? `<div class="pi-insumo-estoque">Estoque: ${ins.estoque}</div>` : ''}
+      </div>`;
     item.addEventListener('click', () => {
       estado.pd.insumoSelecionado = ins;
       lista.querySelectorAll('.pi-insumo-item').forEach(i => i.classList.remove('selecionado'));
       item.classList.add('selecionado');
-      // Preenche o campo de código visível
+      const fotoWrap = $('pi-foto-wrap');
+      fotoWrap.innerHTML = ins.foto
+        ? `<img src="${ins.foto}" alt="${ins.codigo}" style="width:44px;height:44px;border-radius:8px;object-fit:cover;border:1px solid var(--border)" onerror="this.style.display='none'">`
+        : '';
       $('pi-codigo-selecionado').textContent = `${ins.codigo} — ${ins.descricao}`;
       $('pi-codigo-wrap').style.display = 'flex';
     });
@@ -451,50 +502,8 @@ async function salvarInsumo() {
 }
 
 // ============================================================
-// PRODUÇÃO DIÁRIA — PASSO 2: OP (processos com OP)
+// PRODUÇÃO DIÁRIA — TELA INSUMO (Foco / Preforma)
 // ============================================================
-function renderizarOPsProducao() {
-  const lista = $('pd-ops-lista');
-  if (!estado.pd.ops.length) {
-    lista.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-txt">NENHUMA OP ATIVA</div></div>`;
-    return;
-  }
-  lista.innerHTML = estado.pd.ops.map(op => {
-    const sp    = op.statusProducao;
-    const badge = sp === 'Iniciado'  ? '<span class="pd-badge azul">● EM ANDAMENTO</span>'
-                : sp === 'Concluído' ? '<span class="pd-badge verde">● CONCLUÍDO</span>'
-                : '<span class="pd-badge cinza">○ NÃO INICIADO</span>';
-    return `
-      <div class="pd-op-card" data-op="${op.op}">
-        <div class="op-header"><div class="op-numero">${op.op}</div>${badge}</div>
-        <div class="op-body">
-          ${op.foto ? `<img class="op-foto" src="${op.foto}" alt="${op.codigo}" onerror="this.style.display='none'">` : ''}
-          <div class="op-info">
-            <div class="op-codigo">${op.codigo}</div>
-            <div class="op-desc">${op.descricao || '—'}</div>
-          </div>
-        </div>
-        <div class="op-footer">
-          <div class="op-qtde">${op.qtde} <span>UN</span></div>
-          <div class="op-setor-atual">PED ${op.pedido || '—'}</div>
-        </div>
-      </div>`;
-  }).join('');
-  lista.querySelectorAll('.pd-op-card').forEach(card => {
-    card.addEventListener('click', () => selecionarOPProducao(card.dataset.op));
-  });
-}
-
-function selecionarOPProducao(opNum) {
-  const op = estado.pd.ops.find(o => String(o.op) === String(opNum));
-  estado.pd.opSelecionada = op || null;
-  document.querySelectorAll('#pd-ops-lista .pd-op-card').forEach(c => {
-    c.classList.toggle('selecionado', c.dataset.op === String(opNum));
-  });
-  $('btn-pd-lancar').disabled = false;
-}
-
-function pdVoltar() {
   estado.pd.processo       = null;
   estado.pd.opSelecionada  = null;
   estado.pd.insumos        = [];
@@ -560,13 +569,14 @@ async function confirmarLancamento() {
       toast(data.mensagem, 'sucesso');
       if (op && (status === 'Iniciado' || status === 'Concluído')) {
         const idx = estado.pd.ops.findIndex(o => o.op === op.op);
-        if (idx >= 0) estado.pd.ops[idx].statusProducao = status;
+        if (idx >= 0) {
+          estado.pd.ops[idx].statusProducao = status;
+          if (estado.pd.opsFiltradas) {
+            const idxF = estado.pd.opsFiltradas.findIndex(o => o.op === op.op);
+            if (idxF >= 0) estado.pd.opsFiltradas[idxF].statusProducao = status;
+          }
+        }
         renderizarOPsProducao();
-        document.querySelectorAll('#pd-ops-lista .pd-op-card').forEach(c => {
-          if (c.dataset.op === op.op) c.classList.add('selecionado');
-        });
-        $('btn-pd-lancar').disabled = false;
-        estado.pd.opSelecionada = op;
       }
     } else {
       toast(data.erro || 'Erro ao gravar', 'erro');
@@ -624,8 +634,9 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-pd-proximo').addEventListener('click', pdProximo);
   $('btn-pd-voltar').addEventListener('click', pdVoltar);
   $('btn-pd-voltar-insumo').addEventListener('click', pdVoltar);
-  $('btn-pd-lancar').addEventListener('click', pdLancarComOP);
   $('btn-pd-voltar-modulos').addEventListener('click', mostrarTelaModulos);
+  $('pd-filtro-op').addEventListener('input', filtrarOPsProducao);
+  $('btn-pd-limpar-filtro').addEventListener('click', () => { $('pd-filtro-op').value = ''; filtrarOPsProducao(); });
 
   // Tela insumo (Foco/Preforma)
   $('btn-pi-salvar').addEventListener('click', salvarInsumo);
