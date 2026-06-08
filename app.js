@@ -12,13 +12,26 @@ const SETORES_APP = [
   { nome: 'P.A',          seqVe: 5, seqGrava: 6  },
 ];
 
-const PROCESSOS = ['Produção','Preforma','Foco','Embalagem','Desmontagem','Retrabalho','Silk','Limpeza'];
+// Processos e seus insumos (tipo da aba Insumos)
+// null = sem insumo, OP obrigatória
+// string = tipo do insumo, OP opcional
+const PROCESSOS_CONFIG = {
+  'Produção':    { insumo: null,        opObrigatoria: true  },
+  'Silk':        { insumo: null,        opObrigatoria: true  },
+  'Embalagem':   { insumo: null,        opObrigatoria: true  },
+  'Desmontagem': { insumo: null,        opObrigatoria: true  },
+  'Retrabalho':  { insumo: null,        opObrigatoria: true  },
+  'Foco':        { insumo: 'SUBOPTICO', opObrigatoria: false },
+  'Preforma':    { insumo: 'PREFORMA',  opObrigatoria: false },
+};
+
+const PROCESSOS = Object.keys(PROCESSOS_CONFIG);
 
 function getConfigSetor(setor) {
   const nome = String(setor).trim().toUpperCase().replace(/^\d+-/, '');
   return SETORES_APP.find(s => s.nome.toUpperCase() === nome) || null;
 }
-function isPCP() { return !!(getConfigSetor(estado.operador?.setor)?.pcp); }
+function isPCP()      { return !!(getConfigSetor(estado.operador?.setor)?.pcp); }
 function ehProducao() { return String(estado.operador?.setor || '').toUpperCase().includes('PRODU'); }
 
 // ============================================================
@@ -30,12 +43,12 @@ let estado = {
   opsFiltradas:  [],
   opSelecionada: null,
   setorDestino:  null,
-  // Produção Diária
   pd: {
-    processo:    null,   // processo selecionado
-    opSelecionada: null, // OP selecionada (pode ser null)
-    ops:         [],     // lista de OPs para selecionar
-    registros:   [],     // registros do dia
+    processo:      null,
+    opSelecionada: null,
+    ops:           [],
+    insumos:       [],       // lista de insumos do processo atual
+    insumoSelecionado: null, // { codigo, descricao }
   }
 };
 
@@ -64,10 +77,8 @@ function toast(msg, tipo = '') {
 async function api(params, body = null) {
   const qs  = new URLSearchParams(params).toString();
   const url = `${API}${qs ? '?' + qs : ''}`;
-  const opt = body
-    ? { method: 'POST', body: JSON.stringify(body) }
-    : { method: 'GET' };
-  const r = await fetch(url, opt);
+  const opt = body ? { method: 'POST', body: JSON.stringify(body) } : { method: 'GET' };
+  const r   = await fetch(url, opt);
   return r.json();
 }
 
@@ -90,26 +101,18 @@ async function fazerLogin() {
     const data = await api({}, { acao: 'login', nome, pin });
     if (data.status === 'ok') {
       estado.operador = data.operador;
-      // PRODUÇÃO vê tela de seleção de módulo; outros vão direto
-      if (ehProducao()) {
-        mostrarTelaModulos();
-      } else {
-        entrarNaPrincipal();
-      }
+      ehProducao() ? mostrarTelaModulos() : entrarNaPrincipal();
     } else {
       $('login-erro').textContent = data.mensagem || 'Usuário ou PIN inválido';
       $('login-erro').style.display = 'block';
       $('campo-pin').value = '';
     }
-  } catch(e) {
-    toast('Erro de conexão', 'erro');
-  } finally {
-    loading(false);
-  }
+  } catch(e) { toast('Erro de conexão', 'erro'); }
+  finally    { loading(false); }
 }
 
 // ============================================================
-// TELA SELEÇÃO DE MÓDULO (só PRODUÇÃO)
+// MÓDULOS
 // ============================================================
 function mostrarTelaModulos() {
   $('mod-nome').textContent  = estado.operador.nome;
@@ -123,7 +126,6 @@ function mostrarTelaModulos() {
 function entrarNaPrincipal() {
   $('hd-nome').textContent  = estado.operador.nome;
   $('hd-setor').textContent = estado.operador.setor;
-  // Botão "Módulos" só para PRODUÇÃO (que tem acesso aos 2 módulos)
   $('btn-voltar-modulos').style.display = ehProducao() ? 'block' : 'none';
   mostrarTela('tela-principal');
   carregarOPs();
@@ -133,17 +135,10 @@ async function carregarOPs() {
   loading(true, 'BUSCANDO OPs...');
   try {
     const data = await api({ acao: 'getOPsDisponiveis', setor: estado.operador.setor });
-    if (data.status === 'ok') {
-      estado.ops = data.ops || [];
-      aplicarFiltro();
-    } else {
-      toast('Erro ao carregar OPs', 'erro');
-    }
-  } catch(e) {
-    toast('Erro de conexão', 'erro');
-  } finally {
-    loading(false);
-  }
+    if (data.status === 'ok') { estado.ops = data.ops || []; aplicarFiltro(); }
+    else toast('Erro ao carregar OPs', 'erro');
+  } catch(e) { toast('Erro de conexão', 'erro'); }
+  finally    { loading(false); }
 }
 
 function aplicarFiltro() {
@@ -164,7 +159,7 @@ function renderizarLista() {
     return;
   }
   lista.innerHTML = estado.opsFiltradas.map(op => `
-    <div class="op-card" data-op="${op.op}" onclick="selecionarOP('${op.op}')">
+    <div class="op-card" data-op="${op.op}">
       <div class="op-header">
         <div class="op-numero">${op.op}</div>
         <div class="op-pedido">PED ${op.pedido || '—'}</div>
@@ -180,24 +175,25 @@ function renderizarLista() {
         <div class="op-qtde">${op.qtde} <span>UN</span></div>
         <div class="op-setor-atual">${op.statusAtual}</div>
       </div>
-    </div>
-  `).join('');
+    </div>`).join('');
+  lista.querySelectorAll('.op-card').forEach(card => {
+    card.addEventListener('click', () => selecionarOP(card.dataset.op));
+  });
 }
 
 function selecionarOP(opNum) {
   estado.opSelecionada = estado.opsFiltradas.find(o => String(o.op) === String(opNum)) || null;
-  document.querySelectorAll('.op-card').forEach(c => {
+  document.querySelectorAll('#ops-lista .op-card').forEach(c => {
     c.classList.toggle('selecionado', c.dataset.op === String(opNum));
   });
   atualizarBotoes();
 }
 
 function atualizarBotoes() {
-  const temSelecionada = !!estado.opSelecionada;
-  $('btn-receber').disabled = !temSelecionada;
+  const tem = !!estado.opSelecionada;
+  $('btn-receber').disabled  = !tem;
   const cfg = getConfigSetor(estado.operador.setor);
-  const podeRejeitar = temSelecionada && (isPCP() || (cfg && cfg.seqGrava > 2));
-  $('btn-rejeitar').disabled = !podeRejeitar;
+  $('btn-rejeitar').disabled = !(tem && (isPCP() || (cfg && cfg.seqGrava > 2)));
 }
 
 // ============================================================
@@ -213,12 +209,22 @@ function abrirModalReceber() {
   $('mr-cliente').textContent = op.cliente || '—';
   $('mr-obs').value           = '';
   estado.destinoReceber       = null;
-  const cfg = getConfigSetor(estado.operador.setor);
+  const cfg     = getConfigSetor(estado.operador.setor);
   const destDiv = $('mr-destinos');
   if (cfg && cfg.destinoLivre && cfg.destinos) {
     destDiv.style.display = 'block';
-    destDiv.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Enviar para:</div>' +
-      cfg.destinos.map(d => `<button class="rejeitar-op-btn" onclick="selecionarDestinoReceber('${d}', this)">${d}</button>`).join('');
+    destDiv.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--text2);letter-spacing:1px;margin-bottom:8px">ENVIAR PARA:</div>';
+    cfg.destinos.forEach(d => {
+      const btn = document.createElement('button');
+      btn.className   = 'rejeitar-op-btn';
+      btn.textContent = d;
+      btn.addEventListener('click', () => {
+        estado.destinoReceber = d;
+        destDiv.querySelectorAll('.rejeitar-op-btn').forEach(b => b.classList.remove('selecionado'));
+        btn.classList.add('selecionado');
+      });
+      destDiv.appendChild(btn);
+    });
   } else {
     destDiv.style.display = 'none';
     destDiv.innerHTML = '';
@@ -227,45 +233,26 @@ function abrirModalReceber() {
   $('modal-receber').classList.add('ativo');
 }
 
-function selecionarDestinoReceber(destino, el) {
-  estado.destinoReceber = destino;
-  document.querySelectorAll('#mr-destinos .rejeitar-op-btn').forEach(b => b.classList.remove('selecionado'));
-  el.classList.add('selecionado');
-}
-
 function fecharModalReceber() { $('modal-receber').classList.remove('ativo'); }
 
 async function confirmarReceber() {
-  const op = estado.opSelecionada;
+  const op  = estado.opSelecionada;
+  const cfg = getConfigSetor(estado.operador.setor);
   if (!op) return;
+  if (cfg && cfg.destinoLivre && !estado.destinoReceber) { toast('Selecione o destino', 'erro'); return; }
   loading(true, 'GRAVANDO...');
   fecharModalReceber();
   try {
-    const cfg = getConfigSetor(estado.operador.setor);
-    if (cfg && cfg.destinoLivre && !estado.destinoReceber) {
-      loading(false);
-      toast('Selecione o destino antes de confirmar', 'erro');
-      $('modal-receber').classList.add('ativo');
-      return;
-    }
     const data = await api({}, {
       acao: 'receberOP', op: op.op, codigo: op.codigo, qtde: op.qtde,
       pedido: op.pedido, setor: estado.operador.setor, operador: estado.operador.nome,
       destino: estado.destinoReceber || '', origem: op.statusAtual || '',
       obs: $('mr-obs').value.trim()
     });
-    if (data.status === 'ok') {
-      toast(data.mensagem, 'sucesso');
-      estado.opSelecionada = null;
-      await carregarOPs();
-    } else {
-      toast(data.erro || 'Erro ao gravar', 'erro');
-    }
-  } catch(e) {
-    toast('Erro de conexão', 'erro');
-  } finally {
-    loading(false);
-  }
+    if (data.status === 'ok') { toast(data.mensagem, 'sucesso'); estado.opSelecionada = null; await carregarOPs(); }
+    else toast(data.erro || 'Erro ao gravar', 'erro');
+  } catch(e) { toast('Erro de conexão', 'erro'); }
+  finally    { loading(false); }
 }
 
 // ============================================================
@@ -277,23 +264,27 @@ function abrirModalRejeitar() {
   $('mj-op').textContent = op.op;
   $('mj-obs').value      = '';
   estado.setorDestino    = null;
-  const cfgAtual = getConfigSetor(estado.operador.setor);
-  const destinos = isPCP()
+  const cfgAtual  = getConfigSetor(estado.operador.setor);
+  const destinos  = isPCP()
     ? SETORES_APP.filter(s => !s.pcp)
     : (cfgAtual ? SETORES_APP.filter(s => !s.pcp && s.seqGrava < cfgAtual.seqGrava) : []);
-  $('mj-destinos').innerHTML = destinos.map(s => `
-    <button class="rejeitar-op-btn" onclick="selecionarDestino('${s.nome}', this)">${s.nome}</button>
-  `).join('');
+  const container = $('mj-destinos');
+  container.innerHTML = '';
+  destinos.forEach(s => {
+    const btn = document.createElement('button');
+    btn.className   = 'rejeitar-op-btn';
+    btn.textContent = s.nome;
+    btn.addEventListener('click', () => {
+      estado.setorDestino = s.nome;
+      container.querySelectorAll('.rejeitar-op-btn').forEach(b => b.classList.remove('selecionado'));
+      btn.classList.add('selecionado');
+    });
+    container.appendChild(btn);
+  });
   $('modal-rejeitar').classList.add('ativo');
 }
 
 function fecharModalRejeitar() { $('modal-rejeitar').classList.remove('ativo'); }
-
-function selecionarDestino(setor, el) {
-  estado.setorDestino = setor;
-  document.querySelectorAll('.rejeitar-op-btn').forEach(b => b.classList.remove('selecionado'));
-  el.classList.add('selecionado');
-}
 
 async function confirmarRejeitar() {
   const op = estado.opSelecionada;
@@ -306,44 +297,44 @@ async function confirmarRejeitar() {
       pedido: op.pedido, setor: estado.operador.setor, setorDestino: estado.setorDestino,
       operador: estado.operador.nome, obs: $('mj-obs').value.trim()
     });
-    if (data.status === 'ok') {
-      toast(data.mensagem, 'sucesso');
-      estado.opSelecionada = null;
-      await carregarOPs();
-    } else {
-      toast(data.erro || 'Erro ao gravar', 'erro');
-    }
-  } catch(e) {
-    toast('Erro de conexão', 'erro');
-  } finally {
-    loading(false);
-  }
+    if (data.status === 'ok') { toast(data.mensagem, 'sucesso'); estado.opSelecionada = null; await carregarOPs(); }
+    else toast(data.erro || 'Erro ao gravar', 'erro');
+  } catch(e) { toast('Erro de conexão', 'erro'); }
+  finally    { loading(false); }
 }
 
 // ============================================================
-// PRODUÇÃO DIÁRIA — PASSO 1: SELECIONAR PROCESSO
+// PRODUÇÃO DIÁRIA — PASSO 1: PROCESSO
 // ============================================================
 function entrarProducaoDiaria() {
-  estado.pd = { processo: null, opSelecionada: null, ops: [], registros: [] };
+  estado.pd = { processo: null, opSelecionada: null, ops: [], insumos: [], insumoSelecionado: null };
   $('pd-hd-nome').textContent  = estado.operador.nome;
   $('pd-hd-setor').textContent = estado.operador.setor;
+  $('btn-pd-proximo').disabled = true;
   renderizarProcessos();
   mostrarTela('tela-pd');
   mostrarPasso('passo-processo');
 }
 
 function renderizarProcessos() {
-  $('pd-processos').innerHTML = PROCESSOS.map(p => `
-    <button class="pd-processo-btn" onclick="selecionarProcesso('${p}')">${p}</button>
-  `).join('');
-}
-
-function selecionarProcesso(proc) {
-  estado.pd.processo = proc;
-  document.querySelectorAll('.pd-processo-btn').forEach(b => {
-    b.classList.toggle('ativo', b.textContent === proc);
+  const grid = $('pd-processos');
+  grid.innerHTML = '';
+  PROCESSOS.forEach(p => {
+    const cfg = PROCESSOS_CONFIG[p];
+    const btn = document.createElement('button');
+    btn.className   = 'pd-processo-btn';
+    // Mostra ícone de insumo se o processo tiver
+    btn.innerHTML   = cfg.insumo
+      ? `${p}<span class="pd-insumo-tag">${cfg.insumo}</span>`
+      : p;
+    btn.addEventListener('click', () => {
+      estado.pd.processo = p;
+      grid.querySelectorAll('.pd-processo-btn').forEach(b => b.classList.remove('ativo'));
+      btn.classList.add('ativo');
+      $('btn-pd-proximo').disabled = false;
+    });
+    grid.appendChild(btn);
   });
-  $('btn-pd-proximo').disabled = false;
 }
 
 function mostrarPasso(id) {
@@ -353,29 +344,29 @@ function mostrarPasso(id) {
 
 async function pdProximo() {
   if (!estado.pd.processo) return;
-  await carregarOPsProducao();
   $('pd-processo-label').textContent = estado.pd.processo;
-  mostrarPasso('passo-op');
-}
+  $('btn-pd-lancar').disabled = true;
+  estado.pd.opSelecionada    = null;
+  estado.pd.insumoSelecionado= null;
 
-// ============================================================
-// PRODUÇÃO DIÁRIA — PASSO 2: SELECIONAR OP
-// ============================================================
-async function carregarOPsProducao() {
-  loading(true, 'BUSCANDO OPs...');
+  // Carrega OPs e insumos em paralelo
+  loading(true, 'CARREGANDO...');
   try {
-    const data = await api({ acao: 'getOPsProducao' });
-    if (data.status === 'ok') {
-      estado.pd.ops = data.ops || [];
-      renderizarOPsProducao();
-    }
-  } catch(e) {
-    toast('Erro de conexão', 'erro');
-  } finally {
-    loading(false);
-  }
+    const cfg       = PROCESSOS_CONFIG[estado.pd.processo];
+    const promises  = [ api({ acao: 'getOPsProducao' }) ];
+    if (cfg.insumo) promises.push(api({ acao: 'getInsumos', tipo: cfg.insumo }));
+    const results = await Promise.all(promises);
+    estado.pd.ops     = results[0].status === 'ok' ? results[0].ops     : [];
+    estado.pd.insumos = results[1]?.status === 'ok' ? results[1].insumos : [];
+    renderizarOPsProducao();
+    mostrarPasso('passo-op');
+  } catch(e) { toast('Erro de conexão', 'erro'); }
+  finally    { loading(false); }
 }
 
+// ============================================================
+// PRODUÇÃO DIÁRIA — PASSO 2: OP
+// ============================================================
 function renderizarOPsProducao() {
   const lista = $('pd-ops-lista');
   if (!estado.pd.ops.length) {
@@ -383,16 +374,13 @@ function renderizarOPsProducao() {
     return;
   }
   lista.innerHTML = estado.pd.ops.map(op => {
-    const sp = op.statusProducao;
+    const sp    = op.statusProducao;
     const badge = sp === 'Iniciado'  ? '<span class="pd-badge azul">● EM ANDAMENTO</span>'
                 : sp === 'Concluído' ? '<span class="pd-badge verde">● CONCLUÍDO</span>'
                 : '<span class="pd-badge cinza">○ NÃO INICIADO</span>';
     return `
-      <div class="pd-op-card" data-op="${op.op}" onclick="selecionarOPProducao('${op.op}')">
-        <div class="op-header">
-          <div class="op-numero">${op.op}</div>
-          ${badge}
-        </div>
+      <div class="pd-op-card" data-op="${op.op}">
+        <div class="op-header"><div class="op-numero">${op.op}</div>${badge}</div>
         <div class="op-body">
           ${op.foto ? `<img class="op-foto" src="${op.foto}" alt="${op.codigo}" onerror="this.style.display='none'">` : ''}
           <div class="op-info">
@@ -406,138 +394,201 @@ function renderizarOPsProducao() {
         </div>
       </div>`;
   }).join('');
+  lista.querySelectorAll('.pd-op-card').forEach(card => {
+    card.addEventListener('click', () => selecionarOPProducao(card.dataset.op));
+  });
 }
 
 function selecionarOPProducao(opNum) {
   const op = estado.pd.ops.find(o => String(o.op) === String(opNum));
   estado.pd.opSelecionada = op || null;
-  document.querySelectorAll('.pd-op-card').forEach(c => {
+  document.querySelectorAll('#pd-ops-lista .pd-op-card').forEach(c => {
     c.classList.toggle('selecionado', c.dataset.op === String(opNum));
   });
   $('btn-pd-lancar').disabled = false;
 }
 
+function pdVoltar() {
+  estado.pd.processo       = null;
+  estado.pd.opSelecionada  = null;
+  estado.pd.insumos        = [];
+  $('btn-pd-proximo').disabled = true;
+  mostrarPasso('passo-processo');
+  $('pd-processos').querySelectorAll('.pd-processo-btn').forEach(b => b.classList.remove('ativo'));
+}
+
 function pdSemOP() {
+  const cfg = PROCESSOS_CONFIG[estado.pd.processo];
+  if (cfg.opObrigatoria) { toast('Este processo exige uma OP', 'erro'); return; }
   estado.pd.opSelecionada = null;
-  document.querySelectorAll('.pd-op-card').forEach(c => c.classList.remove('selecionado'));
+  document.querySelectorAll('#pd-ops-lista .pd-op-card').forEach(c => c.classList.remove('selecionado'));
   abrirModalLancamento();
 }
 
 function pdLancarComOP() {
-  if (!estado.pd.opSelecionada) { toast('Selecione uma OP ou use "Sem OP"', 'erro'); return; }
+  if (!estado.pd.opSelecionada) { toast('Selecione uma OP', 'erro'); return; }
   abrirModalLancamento();
 }
 
-function pdVoltar() {
-  mostrarPasso('passo-processo');
-  estado.pd.processo = null;
-  $('btn-pd-proximo').disabled = true;
-  document.querySelectorAll('.pd-processo-btn').forEach(b => b.classList.remove('ativo'));
-}
-
 // ============================================================
-// PRODUÇÃO DIÁRIA — MODAL DE LANÇAMENTO
+// PRODUÇÃO DIÁRIA — MODAL LANÇAMENTO
 // ============================================================
 function abrirModalLancamento() {
-  const op      = estado.pd.opSelecionada;
-  const proc    = estado.pd.processo;
+  const op   = estado.pd.opSelecionada;
+  const proc = estado.pd.processo;
+  const cfg  = PROCESSOS_CONFIG[proc];
+
   $('ml-processo').textContent = proc;
-  $('ml-op').textContent       = op ? op.op : '— (sem OP)';
+  $('ml-op').textContent       = op ? `${op.op} — ${op.codigo}` : '— (sem OP)';
   $('ml-qtde').value           = '';
-  // Botões de status
+  $('ml-status-selecionado').value = '';
+  $('ml-qtde-grupo').style.display = 'none';
   document.querySelectorAll('.ml-status-btn').forEach(b => b.classList.remove('ativo'));
-  // Iniciado só aparece se tem OP
-  $('btn-ml-iniciado').style.display = op ? 'block' : 'none';
+
+  // Iniciado só com OP
+  $('btn-ml-iniciado').style.display = op ? 'flex' : 'none';
+
+  // Seção insumos
+  const insumoSection = $('ml-insumo-section');
+  if (cfg.insumo && estado.pd.insumos.length) {
+    insumoSection.style.display = 'block';
+    $('ml-insumo-tipo').textContent = cfg.insumo;
+    renderizarInsumos();
+  } else {
+    insumoSection.style.display = 'none';
+  }
+
+  estado.pd.insumoSelecionado = null;
+  $('ml-qtde-insumo').value   = '';
+
   $('modal-lancamento').classList.add('ativo');
 }
 
-function fecharModalLancamento() {
-  $('modal-lancamento').classList.remove('ativo');
+function renderizarInsumos() {
+  const lista = $('ml-insumos-lista');
+  lista.innerHTML = '';
+  estado.pd.insumos.forEach(ins => {
+    const item = document.createElement('div');
+    item.className      = 'ml-insumo-item';
+    item.dataset.codigo = ins.codigo;
+    item.innerHTML      = `
+      <div class="ml-insumo-codigo">${ins.codigo}</div>
+      <div class="ml-insumo-desc">${ins.descricao}</div>
+      ${ins.estoque !== undefined && ins.estoque !== '' ? `<div class="ml-insumo-estoque">Estoque: ${ins.estoque}</div>` : ''}`;
+    item.addEventListener('click', () => {
+      estado.pd.insumoSelecionado = ins;
+      lista.querySelectorAll('.ml-insumo-item').forEach(i => i.classList.remove('selecionado'));
+      item.classList.add('selecionado');
+    });
+    lista.appendChild(item);
+  });
 }
 
-function selecionarStatusML(status, el) {
+function fecharModalLancamento() { $('modal-lancamento').classList.remove('ativo'); }
+
+function selecionarStatusML(status, btn) {
   document.querySelectorAll('.ml-status-btn').forEach(b => b.classList.remove('ativo'));
-  el.classList.add('ativo');
-  // Qtde obrigatória só no Finalizado
-  $('ml-qtde-grupo').style.display = (status === 'Finalizado') ? 'block' : 'none';
+  btn.classList.add('ativo');
   $('ml-status-selecionado').value = status;
+  // Qtde produzida + insumo só no Finalizado
+  const isFinalizado = status === 'Finalizado';
+  $('ml-qtde-grupo').style.display = isFinalizado ? 'block' : 'none';
+  const insumoSection = $('ml-insumo-section');
+  if (insumoSection.style.display !== 'none') {
+    $('ml-insumo-qtde-grupo').style.display = isFinalizado ? 'block' : 'none';
+  }
 }
 
 async function confirmarLancamento() {
-  const status = $('ml-status-selecionado').value;
-  const proc   = estado.pd.processo;
-  const op     = estado.pd.opSelecionada;
+  const status  = $('ml-status-selecionado').value;
+  const proc    = estado.pd.processo;
+  const cfg     = PROCESSOS_CONFIG[proc];
+  const op      = estado.pd.opSelecionada;
 
   if (!status) { toast('Selecione o status', 'erro'); return; }
+
+  let qtde = 0;
+  let qtdeInsumo = '';
+  let codigoInsumo = '';
+
   if (status === 'Finalizado') {
-    const qtde = Number($('ml-qtde').value);
-    if (!qtde || qtde <= 0) { toast('Informe a quantidade', 'erro'); return; }
+    qtde = Number($('ml-qtde').value);
+    if (!qtde || qtde <= 0) { toast('Informe a quantidade produzida', 'erro'); return; }
+
+    // Valida insumo se o processo exige
+    if (cfg.insumo) {
+      if (!estado.pd.insumoSelecionado) { toast('Selecione o ' + cfg.insumo, 'erro'); return; }
+      qtdeInsumo = Number($('ml-qtde-insumo').value);
+      if (!qtdeInsumo || qtdeInsumo <= 0) { toast('Informe a quantidade do insumo', 'erro'); return; }
+      codigoInsumo = estado.pd.insumoSelecionado.codigo;
+    }
   }
 
   loading(true, 'GRAVANDO...');
   fecharModalLancamento();
 
   try {
-    const qtde = status === 'Finalizado' ? Number($('ml-qtde').value) : 0;
     const data = await api({}, {
-      acao:      'registrarProducao',
-      op:        op ? op.op : '',
-      processo:  proc,
-      qtde:      qtde,
-      status:    status,
-      operador:  estado.operador.nome
+      acao:          'registrarProducao',
+      op:            op ? op.op : '',
+      codigoProduto: op ? op.codigo : '',
+      processo:      proc,
+      qtde,
+      status,
+      operador:      estado.operador.nome,
+      insumo:        codigoInsumo,
+      qtdeInsumo:    qtdeInsumo || ''
     });
 
     if (data.status === 'ok') {
       toast(data.mensagem, 'sucesso');
-      // Atualiza badge da OP na lista
+      // Atualiza badge na lista
       if (op && (status === 'Iniciado' || status === 'Concluído')) {
         const idx = estado.pd.ops.findIndex(o => o.op === op.op);
         if (idx >= 0) estado.pd.ops[idx].statusProducao = status;
         renderizarOPsProducao();
-        // Mantém OP selecionada
-        document.querySelectorAll('.pd-op-card').forEach(c => {
-          c.classList.toggle('selecionado', c.dataset.op === op.op);
+        document.querySelectorAll('#pd-ops-lista .pd-op-card').forEach(c => {
+          if (c.dataset.op === op.op) c.classList.add('selecionado');
         });
+        $('btn-pd-lancar').disabled  = false;
+        estado.pd.opSelecionada = op;
       }
     } else {
       toast(data.erro || 'Erro ao gravar', 'erro');
     }
-  } catch(e) {
-    toast('Erro de conexão', 'erro');
-  } finally {
-    loading(false);
-  }
+  } catch(e) { toast('Erro de conexão', 'erro'); }
+  finally    { loading(false); }
+}
+
+// ============================================================
+// LOGOUT
+// ============================================================
+function fazerLogout() {
+  estado = {
+    operador: null, ops: [], opsFiltradas: [], opSelecionada: null, setorDestino: null,
+    pd: { processo: null, opSelecionada: null, ops: [], insumos: [], insumoSelecionado: null }
+  };
+  $('campo-nome').value = '';
+  $('campo-pin').value  = '';
+  $('btn-login').disabled = true;
+  mostrarTela('tela-login');
 }
 
 // ============================================================
 // EVENTOS
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
-  // Login
   $('campo-nome').addEventListener('input', atualizarBtnLogin);
   $('campo-pin').addEventListener('input', atualizarBtnLogin);
   $('campo-nome').addEventListener('keydown', e => { if (e.key === 'Enter') $('campo-pin').focus(); });
   $('campo-pin').addEventListener('keydown', e => { if (e.key === 'Enter') fazerLogin(); });
   $('btn-login').addEventListener('click', fazerLogin);
 
-  // Sair — qualquer tela
-  document.querySelectorAll('.btn-sair-global').forEach(btn => {
-    btn.addEventListener('click', () => {
-      estado = { operador: null, ops: [], opsFiltradas: [], opSelecionada: null, setorDestino: null,
-                 pd: { processo: null, opSelecionada: null, ops: [], registros: [] } };
-      $('campo-nome').value = '';
-      $('campo-pin').value  = '';
-      $('btn-login').disabled = true;
-      mostrarTela('tela-login');
-    });
-  });
+  document.querySelectorAll('.btn-sair-global').forEach(btn => btn.addEventListener('click', fazerLogout));
 
-  // Seleção de módulo
   $('btn-modulo-fluxo').addEventListener('click', entrarNaPrincipal);
   $('btn-modulo-pd').addEventListener('click', entrarProducaoDiaria);
 
-  // Principal — Fluxo
   $('btn-atualizar').addEventListener('click', carregarOPs);
   $('filtro-pedido').addEventListener('input', aplicarFiltro);
   $('btn-limpar-filtro').addEventListener('click', () => { $('filtro-pedido').value = ''; aplicarFiltro(); });
@@ -545,28 +596,24 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-rejeitar').addEventListener('click', abrirModalRejeitar);
   $('btn-voltar-modulos').addEventListener('click', mostrarTelaModulos);
 
-  // Modal receber
   $('mr-cancelar').addEventListener('click', fecharModalReceber);
   $('mr-confirmar').addEventListener('click', confirmarReceber);
   $('modal-receber').addEventListener('click', e => { if (e.target === $('modal-receber')) fecharModalReceber(); });
 
-  // Modal rejeitar
   $('mj-cancelar').addEventListener('click', fecharModalRejeitar);
   $('mj-confirmar').addEventListener('click', confirmarRejeitar);
   $('modal-rejeitar').addEventListener('click', e => { if (e.target === $('modal-rejeitar')) fecharModalRejeitar(); });
 
-  // Produção Diária
   $('btn-pd-proximo').addEventListener('click', pdProximo);
   $('btn-pd-voltar').addEventListener('click', pdVoltar);
   $('btn-pd-sem-op').addEventListener('click', pdSemOP);
   $('btn-pd-lancar').addEventListener('click', pdLancarComOP);
   $('btn-pd-voltar-modulos').addEventListener('click', mostrarTelaModulos);
 
-  // Modal lançamento
+  $('btn-ml-iniciado').addEventListener('click',  function(){ selecionarStatusML('Iniciado',  this); });
+  $('btn-ml-finalizado').addEventListener('click', function(){ selecionarStatusML('Finalizado', this); });
+  $('btn-ml-concluido').addEventListener('click',  function(){ selecionarStatusML('Concluído',  this); });
   $('ml-cancelar').addEventListener('click', fecharModalLancamento);
   $('ml-confirmar').addEventListener('click', confirmarLancamento);
-  $('btn-ml-iniciado').addEventListener('click', function(){ selecionarStatusML('Iniciado', this); });
-  $('btn-ml-finalizado').addEventListener('click', function(){ selecionarStatusML('Finalizado', this); });
-  $('btn-ml-concluido').addEventListener('click', function(){ selecionarStatusML('Concluído', this); });
   $('modal-lancamento').addEventListener('click', e => { if (e.target === $('modal-lancamento')) fecharModalLancamento(); });
 });
