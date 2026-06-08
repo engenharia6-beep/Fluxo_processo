@@ -517,21 +517,64 @@ function pdVoltar() {
 // ============================================================
 // MODAL LANÇAMENTO (processos com OP)
 // ============================================================
-function abrirModalLancamento() {
+async function abrirModalLancamento() {
   const op   = estado.pd.opSelecionada;
+  const sp   = op ? op.statusProducao : '';
+
   $('ml-processo').textContent     = estado.pd.processo;
   $('ml-op').textContent           = op ? `${op.op} — ${op.codigo}` : '—';
   $('ml-qtde').value               = '';
   $('ml-obs-op').value             = '';
   $('ml-status-selecionado').value = '';
   $('ml-qtde-grupo').style.display = 'none';
-  document.querySelectorAll('.ml-status-btn').forEach(b => b.classList.remove('ativo'));
+  document.querySelectorAll('.ml-status-btn').forEach(b => {
+    b.classList.remove('ativo');
+    b.disabled = false;
+    b.style.opacity = '1';
+  });
+
+  // Regra: Iniciado só se ainda não foi iniciado
+  const btnIniciado = $('btn-ml-iniciado');
+  if (sp === 'Iniciado' || sp === 'Concluído') {
+    btnIniciado.disabled = true;
+    btnIniciado.style.opacity = '0.35';
+    btnIniciado.title = 'OP já foi iniciada';
+  }
+
+  // Regra: Concluído só se ainda não foi concluído
+  const btnConcluido = $('btn-ml-concluido');
+  if (sp === 'Concluído') {
+    btnConcluido.disabled = true;
+    btnConcluido.style.opacity = '0.35';
+    btnConcluido.title = 'OP já foi concluída';
+  }
+
+  // Busca qtde já lançada hoje para mostrar o limite disponível
+  estado.pd.qtdeJaLancada = 0;
+  if (op) {
+    try {
+      const data = await api({ acao: 'getRegistrosProducao', op: op.op, processo: estado.pd.processo });
+      if (data.status === 'ok') {
+        estado.pd.qtdeJaLancada = data.registros
+          .filter(r => r.status === 'Finalizado')
+          .reduce((sum, r) => sum + Number(r.qtde || 0), 0);
+      }
+    } catch(e) { /* ignora — validará ao salvar */ }
+
+    const disponivel = Number(op.qtde) - estado.pd.qtdeJaLancada;
+    $('ml-qtde-info').textContent = disponivel > 0
+      ? `Disponível: ${disponivel} de ${op.qtde} UN`
+      : `Limite atingido (${op.qtde} UN)`;
+    $('ml-qtde-info').style.color = disponivel <= 0 ? 'var(--danger)' : 'var(--text2)';
+  }
+
   $('modal-lancamento').classList.add('ativo');
 }
 
 function fecharModalLancamento() { $('modal-lancamento').classList.remove('ativo'); }
 
 function selecionarStatusML(status, btn) {
+  if (btn.disabled) return;
   document.querySelectorAll('.ml-status-btn').forEach(b => b.classList.remove('ativo'));
   btn.classList.add('ativo');
   $('ml-status-selecionado').value = status;
@@ -542,10 +585,18 @@ async function confirmarLancamento() {
   const status = $('ml-status-selecionado').value;
   const op     = estado.pd.opSelecionada;
   if (!status) { toast('Selecione o status', 'erro'); return; }
+
   let qtde = 0;
   if (status === 'Finalizado') {
     qtde = Number($('ml-qtde').value);
     if (!qtde || qtde <= 0) { toast('Informe a quantidade produzida', 'erro'); return; }
+    // Regra: soma dos finalizados não pode ultrapassar qtde da OP
+    const limite     = Number(op.qtde);
+    const jaLancada  = estado.pd.qtdeJaLancada || 0;
+    if (jaLancada + qtde > limite) {
+      toast(`Limite da OP é ${limite} UN — já lançado: ${jaLancada} UN`, 'erro');
+      return;
+    }
   }
   loading(true, 'GRAVANDO...');
   fecharModalLancamento();
