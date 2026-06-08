@@ -398,20 +398,13 @@ function renderizarOPsProducao() {
         </div>
         <div class="op-footer">
           <div class="op-qtde">${op.qtde} <span>UN</span></div>
-          <button class="hist-btn-card" data-op="${op.op}" title="Ver histórico do dia">📋 Histórico</button>
           <div class="op-setor-atual">PED ${op.pedido || '—'}</div>
         </div>
       </div>`;
   }).join('');
   // Clicar já abre o modal diretamente
   lista.querySelectorAll('.pd-op-card').forEach(card => {
-    card.addEventListener('click', (e) => {
-      // Se clicou no botão histórico, abre histórico
-      if (e.target.closest('.hist-btn-card')) {
-        const op = ops.find(o => String(o.op) === card.dataset.op);
-        if (op) abrirHistorico(op, estado.pd.processo);
-        return;
-      }
+    card.addEventListener('click', () => {
       const op = ops.find(o => String(o.op) === card.dataset.op);
       if (!op) return;
       estado.pd.opSelecionada = op;
@@ -524,66 +517,21 @@ function pdVoltar() {
 // ============================================================
 // MODAL LANÇAMENTO (processos com OP)
 // ============================================================
-async function abrirModalLancamento() {
+function abrirModalLancamento() {
   const op   = estado.pd.opSelecionada;
-  const sp   = op ? op.statusProducao : '';
-
   $('ml-processo').textContent     = estado.pd.processo;
   $('ml-op').textContent           = op ? `${op.op} — ${op.codigo}` : '—';
   $('ml-qtde').value               = '';
   $('ml-obs-op').value             = '';
   $('ml-status-selecionado').value = '';
   $('ml-qtde-grupo').style.display = 'none';
-  document.querySelectorAll('.ml-status-btn').forEach(b => {
-    b.classList.remove('ativo');
-    b.disabled = false;
-    b.style.opacity = '1';
-  });
-
-  // Regra: Iniciado só se ainda não foi iniciado
-  const btnIniciado = $('btn-ml-iniciado');
-  if (sp === 'Iniciado' || sp === 'Concluído') {
-    btnIniciado.disabled = true;
-    btnIniciado.style.opacity = '0.35';
-    btnIniciado.title = 'OP já foi iniciada';
-  }
-
-  // Regra: Concluído só se ainda não foi concluído
-  const btnConcluido = $('btn-ml-concluido');
-  if (sp === 'Concluído') {
-    btnConcluido.disabled = true;
-    btnConcluido.style.opacity = '0.35';
-    btnConcluido.title = 'OP já foi concluída';
-  }
-
-  // Busca qtde já lançada hoje ANTES de abrir o modal
-  estado.pd.qtdeJaLancada = 0;
-  if (op) {
-    loading(true, 'VERIFICANDO...');
-    try {
-      const data = await api({ acao: 'getRegistrosProducao', op: op.op, processo: estado.pd.processo });
-      if (data.status === 'ok') {
-        estado.pd.qtdeJaLancada = data.registros
-          .filter(r => r.status === 'Finalizado')
-          .reduce((sum, r) => sum + Number(r.qtde || 0), 0);
-      }
-    } catch(e) { /* ignora */ }
-    finally { loading(false); }
-
-    const disponivel = Number(op.qtde) - estado.pd.qtdeJaLancada;
-    $('ml-qtde-info').textContent = disponivel > 0
-      ? `Disponível: ${disponivel} de ${op.qtde} UN`
-      : `Limite atingido (${op.qtde} UN)`;
-    $('ml-qtde-info').style.color = disponivel <= 0 ? 'var(--danger)' : 'var(--text2)';
-  }
-
+  document.querySelectorAll('.ml-status-btn').forEach(b => b.classList.remove('ativo'));
   $('modal-lancamento').classList.add('ativo');
 }
 
 function fecharModalLancamento() { $('modal-lancamento').classList.remove('ativo'); }
 
 function selecionarStatusML(status, btn) {
-  if (btn.disabled) return;
   document.querySelectorAll('.ml-status-btn').forEach(b => b.classList.remove('ativo'));
   btn.classList.add('ativo');
   $('ml-status-selecionado').value = status;
@@ -599,14 +547,30 @@ async function confirmarLancamento() {
   if (status === 'Finalizado') {
     qtde = Number($('ml-qtde').value);
     if (!qtde || qtde <= 0) { toast('Informe a quantidade produzida', 'erro'); return; }
-    // Regra: soma dos finalizados não pode ultrapassar qtde da OP
-    const limite     = Number(op.qtde);
-    const jaLancada  = estado.pd.qtdeJaLancada || 0;
-    if (jaLancada + qtde > limite) {
-      toast(`Limite da OP é ${limite} UN — já lançado: ${jaLancada} UN`, 'erro');
-      return;
-    }
+
+    // Validação de limite — busca do servidor na hora de salvar (proteção definitiva)
+    loading(true, 'VERIFICANDO LIMITE...');
+    try {
+      const check = await api({ acao: 'getRegistrosProducao', op: op.op, processo: estado.pd.processo });
+      const jaLancado = check.status === 'ok'
+        ? check.registros.filter(r => r.status === 'Finalizado').reduce((s,r) => s + Number(r.qtde||0), 0)
+        : 0;
+      const limite    = Number(op.qtde);
+      const total     = jaLancado + qtde;
+
+      if (total > limite) {
+        loading(false);
+        const excesso = total - limite;
+        // Alerta mas deixa escolher — conforme pedido ("alertar para o fato")
+        const confirmar = confirm(
+          `⚠ Atenção!\n\nOP ${op.op} prevê ${limite} UN\nJá lançado: ${jaLancado} UN\nNovo lançamento: ${qtde} UN\nTotal: ${total} UN (excede em ${excesso} UN)\n\nDeseja registrar mesmo assim?`
+        );
+        if (!confirmar) return;
+      }
+    } catch(e) { loading(false); /* ignora erro de rede, continua */ }
+    finally { loading(false); }
   }
+
   loading(true, 'GRAVANDO...');
   fecharModalLancamento();
   try {
@@ -622,7 +586,29 @@ async function confirmarLancamento() {
       insumo:        '',
       qtdeInsumo:    ''
     });
-    if (data.status === 'ok') {
+
+    if (data.status === 'aviso') {
+      // Backend detectou excesso — alerta e pede confirmação
+      loading(false);
+      const confirmar = confirm(
+        `⚠ ATENÇÃO — Limite da OP excedido!\n\nOP prevê: ${data.limiteOP} UN\nJá lançado: ${data.jaLancado} UN\nNovo lançamento: ${data.novaQtde} UN\nTotal ficaria: ${data.total} UN\n\nDeseja gravar mesmo assim?`
+      );
+      if (!confirmar) return;
+      // Grava forçado com flag override
+      loading(true, 'GRAVANDO...');
+      const data2 = await api({}, {
+        acao: 'registrarProducao',
+        op: op ? op.op : '', codigoProduto: op ? op.codigo : '',
+        processo: estado.pd.processo, qtde, status,
+        operador: estado.operador.nome, obs: $('ml-obs-op').value.trim(),
+        insumo: '', qtdeInsumo: '', override: true
+      });
+      if (data2.status === 'ok') {
+        toast('Lançamento registrado com excesso de quantidade', 'erro');
+      } else {
+        toast(data2.erro || 'Erro ao gravar', 'erro');
+      }
+    } else if (data.status === 'ok') {
       toast(data.mensagem, 'sucesso');
       if (op && (status === 'Iniciado' || status === 'Concluído')) {
         const idx = estado.pd.ops.findIndex(o => o.op === op.op);
@@ -698,9 +684,6 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-pi-salvar').addEventListener('click', salvarInsumo);
 
   // Modal lançamento OP
-  $('btn-fechar-historico').addEventListener('click', fecharHistorico);
-  $('modal-historico').addEventListener('click', e => { if (e.target === $('modal-historico')) fecharHistorico(); });
-
   $('btn-ml-iniciado').addEventListener('click',  function(){ selecionarStatusML('Iniciado',  this); });
   $('btn-ml-finalizado').addEventListener('click', function(){ selecionarStatusML('Finalizado', this); });
   $('btn-ml-concluido').addEventListener('click',  function(){ selecionarStatusML('Concluído',  this); });
@@ -708,149 +691,3 @@ document.addEventListener('DOMContentLoaded', () => {
   $('ml-confirmar').addEventListener('click', confirmarLancamento);
   $('modal-lancamento').addEventListener('click', e => { if (e.target === $('modal-lancamento')) fecharModalLancamento(); });
 });
-
-// ============================================================
-// HISTÓRICO DA OP — tela separada
-// ============================================================
-let historicoAtual = []; // registros carregados
-
-async function abrirHistorico(op, processo) {
-  estado.pd.opSelecionada = op;
-  $('hist-op').textContent      = op.op + ' — ' + op.codigo;
-  $('hist-processo').textContent= processo;
-  $('hist-lista').innerHTML     = '<div class="empty-state"><div class="empty-state-icon">⏳</div><div class="empty-state-txt">CARREGANDO...</div></div>';
-  $('modal-historico').classList.add('ativo');
-
-  try {
-    const data = await api({ acao: 'getRegistrosProducao', op: op.op, processo });
-    historicoAtual = data.status === 'ok' ? data.registros : [];
-    renderizarHistorico(op);
-  } catch(e) {
-    $('hist-lista').innerHTML = '<div class="empty-state"><div class="empty-state-txt">Erro ao carregar</div></div>';
-  }
-}
-
-function renderizarHistorico(op) {
-  const lista = $('hist-lista');
-  if (!historicoAtual.length) {
-    lista.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-txt">NENHUM REGISTRO HOJE</div></div>';
-    return;
-  }
-
-  const totalFinalizado = historicoAtual
-    .filter(r => r.status === 'Finalizado')
-    .reduce((s, r) => s + Number(r.qtde || 0), 0);
-
-  lista.innerHTML = `
-    <div class="hist-resumo">
-      <span>Total lançado hoje:</span>
-      <span class="hist-total ${totalFinalizado > Number(op.qtde) ? 'erro' : ''}">${totalFinalizado} / ${op.qtde} UN</span>
-    </div>` +
-    historicoAtual.map(r => `
-    <div class="hist-item" data-id="${r.id}">
-      <div class="hist-item-top">
-        <span class="pd-badge ${r.status === 'Iniciado' ? 'azul' : r.status === 'Concluído' ? 'verde' : 'laranja'}">${r.status}</span>
-        <span class="hist-hora">${formatarHora(r.hora)}</span>
-      </div>
-      ${r.status === 'Finalizado' ? `<div class="hist-qtde">${r.qtde} UN</div>` : ''}
-      <div class="hist-acoes">
-        ${r.status === 'Finalizado' ? `<button class="hist-btn-editar" onclick="iniciarEdicao('${r.id}', ${r.qtde})">✏ Editar</button>` : ''}
-        <button class="hist-btn-excluir" onclick="confirmarExclusao('${r.id}')">✕ Excluir</button>
-      </div>
-      <div class="hist-editar-form" id="edit-${r.id}" style="display:none">
-        <input type="number" class="ml-qtde-input" id="edit-input-${r.id}" value="${r.qtde}" inputmode="numeric" min="1" style="font-size:16px;padding:10px;margin-bottom:8px">
-        <div style="display:flex;gap:8px">
-          <button class="pd-btn-sec" onclick="cancelarEdicao('${r.id}')" style="flex:1;padding:10px;font-size:12px">CANCELAR</button>
-          <button class="pd-btn-acao" onclick="salvarEdicao('${r.id}', ${op.qtde})" style="flex:2;padding:10px;font-size:12px">✓ SALVAR</button>
-        </div>
-      </div>
-    </div>`).join('');
-}
-
-function formatarHora(ts) {
-  if (!ts) return '—';
-  const d = new Date(ts);
-  if (isNaN(d)) return String(ts).substring(11, 16) || '—';
-  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-}
-
-function iniciarEdicao(id, qtdeAtual) {
-  document.querySelectorAll('.hist-editar-form').forEach(f => f.style.display = 'none');
-  $(`edit-${id}`).style.display = 'block';
-  $(`edit-input-${id}`).focus();
-}
-
-function cancelarEdicao(id) {
-  $(`edit-${id}`).style.display = 'none';
-}
-
-async function salvarEdicao(id, limiteOP) {
-  const novaQtde = Number($(`edit-input-${id}`).value);
-  if (!novaQtde || novaQtde <= 0) { toast('Quantidade inválida', 'erro'); return; }
-
-  // Valida limite: soma dos outros finalizados + nova qtde <= limiteOP
-  const outrosFinalizados = historicoAtual
-    .filter(r => r.id !== id && r.status === 'Finalizado')
-    .reduce((s, r) => s + Number(r.qtde || 0), 0);
-  if (outrosFinalizados + novaQtde > limiteOP) {
-    toast(`Limite da OP é ${limiteOP} UN — outros lançamentos: ${outrosFinalizados} UN`, 'erro');
-    return;
-  }
-
-  loading(true, 'SALVANDO...');
-  try {
-    const data = await api({}, { acao: 'editarProducao', id, qtde: novaQtde });
-    if (data.status === 'ok') {
-      toast('Quantidade atualizada', 'sucesso');
-      // Atualiza local
-      const idx = historicoAtual.findIndex(r => r.id === id);
-      if (idx >= 0) historicoAtual[idx].qtde = novaQtde;
-      renderizarHistorico(estado.pd.opSelecionada);
-    } else {
-      toast(data.erro || 'Erro ao salvar', 'erro');
-    }
-  } catch(e) { toast('Erro de conexão', 'erro'); }
-  finally    { loading(false); }
-}
-
-async function confirmarExclusao(id) {
-  const reg = historicoAtual.find(r => r.id === id);
-  if (!reg) return;
-  if (!confirm(`Excluir registro "${reg.status}" ${reg.qtde ? '— ' + reg.qtde + ' UN' : ''}?`)) return;
-
-  loading(true, 'EXCLUINDO...');
-  try {
-    const data = await api({}, { acao: 'excluirProducao', id });
-    if (data.status === 'ok') {
-      toast('Registro excluído', 'sucesso');
-      historicoAtual = historicoAtual.filter(r => r.id !== id);
-      renderizarHistorico(estado.pd.opSelecionada);
-      // Atualiza badge na lista de OPs
-      await atualizarBadgeOP(estado.pd.opSelecionada.op);
-    } else {
-      toast(data.erro || 'Erro ao excluir', 'erro');
-    }
-  } catch(e) { toast('Erro de conexão', 'erro'); }
-  finally    { loading(false); }
-}
-
-async function atualizarBadgeOP(opNum) {
-  // Recalcula status da OP com base nos registros restantes
-  const temIniciado  = historicoAtual.some(r => r.status === 'Iniciado');
-  const temConcluido = historicoAtual.some(r => r.status === 'Concluído');
-  const novoStatus   = temConcluido ? 'Concluído' : temIniciado ? 'Iniciado' : '';
-  const idx = estado.pd.ops.findIndex(o => o.op === opNum);
-  if (idx >= 0) {
-    estado.pd.ops[idx].statusProducao = novoStatus;
-    if (estado.pd.opsFiltradas) {
-      const idxF = estado.pd.opsFiltradas.findIndex(o => o.op === opNum);
-      if (idxF >= 0) estado.pd.opsFiltradas[idxF].statusProducao = novoStatus;
-    }
-    renderizarOPsProducao();
-  }
-}
-
-function fecharHistorico() {
-  $('modal-historico').classList.remove('ativo');
-  historicoAtual = [];
-}
