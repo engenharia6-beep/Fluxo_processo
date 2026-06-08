@@ -368,17 +368,38 @@
   .toast.erro { border-color: #cc3322; color: #cc3322; }
   .toast.visivel { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  /* Header fixo passo-op e passo-insumo */
+  .pd-op-header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 12px 16px; display: flex; flex-direction: column; gap: 10px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .pd-op-header-top {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .pd-btn-back {
+    background: none; border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 12px; font-family: var(--mono); font-size: 11px;
+    color: var(--text2); cursor: pointer; transition: all .2s; white-space: nowrap;
+  }
+  .pd-btn-back:hover { border-color: var(--accent); color: var(--accent); }
+  .pd-op-filtro-row {
+    display: flex; gap: 8px; align-items: center;
+  }
+
   /* Lista de insumos — tela Foco/Preforma */
   .pi-insumos-lista {
-    display: flex; flex-direction: column; gap: 6px;
-    max-height: 220px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 8px;
   }
   .pi-insumo-item {
     background: var(--surface); border: 1.5px solid var(--border);
-    border-radius: 10px; padding: 12px 14px; cursor: pointer; transition: all .2s;
+    border-radius: 12px; padding: 12px 14px; cursor: pointer; transition: all .2s;
+    display: flex; gap: 12px; align-items: center;
   }
   .pi-insumo-item:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(10,110,110,0.08); }
   .pi-insumo-item.selecionado { border-color: var(--accent2); background: #fff5ec; }
+  .pi-insumo-foto { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); flex-shrink: 0; }
+  .pi-insumo-info { flex: 1; min-width: 0; }
   .pi-insumo-codigo { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--accent2); margin-bottom: 3px; }
   .pi-insumo-desc { font-size: 13px; color: var(--text); line-height: 1.3; }
   .pi-insumo-estoque { font-family: var(--mono); font-size: 10px; color: var(--text2); margin-top: 4px; }
@@ -529,39 +550,47 @@
 
   <!-- PASSO 2: Escolher OP (Produção, Silk, Embalagem, Desmontagem, Retrabalho) -->
   <div class="pd-passo" id="passo-op">
-    <div style="padding:16px 16px 8px;display:flex;align-items:center;gap:10px">
-      <div class="pd-section-label" style="padding:0;margin:0">Selecione a OP</div>
-      <span class="pd-processo-chip" id="pd-processo-label">—</span>
+    <!-- Header fixo com processo + botão voltar + filtro -->
+    <div class="pd-op-header">
+      <div class="pd-op-header-top">
+        <button class="pd-btn-back" id="btn-pd-voltar">◀ VOLTAR</button>
+        <span class="pd-processo-chip" id="pd-processo-label">—</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text2)" id="pd-contador-ops">0 OPs</span>
+      </div>
+      <div class="pd-op-filtro-row">
+        <input class="toolbar-filtro" type="text" id="pd-filtro-op" placeholder="Filtrar por OP ou pedido..." inputmode="numeric" style="flex:1;margin:0">
+        <button class="toolbar-btn" id="btn-pd-limpar-filtro">✕</button>
+      </div>
     </div>
-    <div class="ops-lista" id="pd-ops-lista" style="padding:0 16px 16px"></div>
-    <div class="pd-bottom">
-      <button class="pd-btn-sec" id="btn-pd-voltar">◀ VOLTAR</button>
-      <button class="pd-btn-acao" id="btn-pd-lancar" disabled>LANÇAR ▶</button>
-    </div>
+    <div class="ops-lista" id="pd-ops-lista" style="padding:12px 16px 16px"></div>
   </div>
 
   <!-- PASSO 3: Tela Insumo (Foco / Preforma) — sem OP -->
   <div class="pd-passo" id="passo-insumo">
-    <div style="padding:16px 16px 8px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)">
-      <span class="pd-processo-chip" id="pi-processo-label">—</span>
-      <span style="font-family:var(--mono);font-size:11px;color:var(--text2);letter-spacing:1px" id="pi-tipo-label">—</span>
+    <!-- Header fixo -->
+    <div class="pd-op-header">
+      <div class="pd-op-header-top">
+        <button class="pd-btn-back" id="btn-pd-voltar-insumo">◀ VOLTAR</button>
+        <span class="pd-processo-chip" id="pi-processo-label">—</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text2);letter-spacing:1px" id="pi-tipo-label">—</span>
+      </div>
     </div>
 
-    <div style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px">
-
-      <!-- Insumo selecionado (aparece após escolher) -->
-      <div id="pi-codigo-wrap" style="display:none;background:#fff5ec;border:1.5px solid var(--accent2);border-radius:10px;padding:12px 14px;align-items:center;gap:10px">
-        <span style="font-size:18px">📦</span>
-        <div>
-          <div style="font-family:var(--mono);font-size:10px;color:var(--text2);letter-spacing:1px;margin-bottom:2px">INSUMO SELECIONADO</div>
-          <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent2)" id="pi-codigo-selecionado">—</div>
-        </div>
-      </div>
+    <div style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px">
 
       <!-- Lista de insumos -->
       <div>
         <div class="pd-section-label" style="padding:0;margin-bottom:8px">Selecione o insumo</div>
         <div id="pi-insumos-lista" class="pi-insumos-lista"></div>
+      </div>
+
+      <!-- Insumo selecionado (confirmação visual) -->
+      <div id="pi-codigo-wrap" style="display:none;background:#fff5ec;border:1.5px solid var(--accent2);border-radius:10px;padding:12px 14px;align-items:center;gap:12px">
+        <div id="pi-foto-wrap" style="flex-shrink:0"></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text2);letter-spacing:1px;margin-bottom:3px">SELECIONADO</div>
+          <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="pi-codigo-selecionado">—</div>
+        </div>
       </div>
 
       <!-- Quantidade -->
@@ -579,7 +608,6 @@
     </div>
 
     <div class="pd-bottom">
-      <button class="pd-btn-sec" id="btn-pd-voltar-insumo">◀ VOLTAR</button>
       <button class="pd-btn-acao" id="btn-pi-salvar">✓ SALVAR</button>
     </div>
   </div>
