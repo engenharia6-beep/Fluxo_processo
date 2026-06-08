@@ -410,6 +410,46 @@
     color: var(--accent2); letter-spacing: .5px; margin-top: 3px; text-transform: uppercase;
   }
 
+  /* Botão histórico no card */
+  .hist-btn-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 10px; font-family: var(--mono);
+    font-size: 10px; color: var(--text2); cursor: pointer;
+    transition: all .2s; white-space: nowrap;
+  }
+  .hist-btn-card:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Modal histórico */
+  .hist-resumo {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--surface2); border-radius: 8px; padding: 10px 14px;
+    font-family: var(--mono); font-size: 12px; color: var(--text2); margin-bottom: 4px;
+  }
+  .hist-total { font-weight: 700; color: var(--accent); }
+  .hist-total.erro { color: var(--danger); }
+  .hist-item {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px;
+  }
+  .hist-item-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .hist-hora { font-family: var(--mono); font-size: 11px; color: var(--text2); }
+  .hist-qtde { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .hist-acoes { display: flex; gap: 8px; }
+  .hist-btn-editar {
+    flex: 1; background: none; border: 1px solid var(--accent);
+    color: var(--accent); border-radius: 8px; padding: 8px;
+    font-family: var(--mono); font-size: 11px; cursor: pointer; transition: all .2s;
+  }
+  .hist-btn-editar:hover { background: var(--accent); color: #fff; }
+  .hist-btn-excluir {
+    flex: 1; background: none; border: 1px solid var(--danger);
+    color: var(--danger); border-radius: 8px; padding: 8px;
+    font-family: var(--mono); font-size: 11px; cursor: pointer; transition: all .2s;
+  }
+  .hist-btn-excluir:hover { background: var(--danger); color: #fff; }
+  .hist-editar-form { margin-top: 10px; }
+  .pd-badge.laranja { background: #fff5ec; color: var(--accent2); }
+
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: #EDF6F4; }
   ::-webkit-scrollbar-thumb { background: rgba(10,110,110,0.2); border-radius: 2px; }
@@ -685,6 +725,23 @@
     <div class="modal-btns" style="margin-top:16px">
       <button class="btn-cancelar" id="ml-cancelar">CANCELAR</button>
       <button class="btn-receber"  id="ml-confirmar">✓ SALVAR</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- MODAL HISTÓRICO DA OP -->
+<!-- ═══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-historico">
+  <div class="modal" style="max-height:85vh">
+    <div class="modal-titulo">Registros do dia</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span class="pd-processo-chip" id="hist-processo">—</span>
+      <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent)" id="hist-op">—</span>
+    </div>
+    <div id="hist-lista" style="display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:55vh"></div>
+    <div style="margin-top:16px">
+      <button class="btn-cancelar" id="btn-fechar-historico" style="width:100%">FECHAR</button>
     </div>
   </div>
 </div>
