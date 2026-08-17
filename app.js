@@ -249,8 +249,65 @@ async function confirmarReceber() {
       destino: estado.destinoReceber || '', origem: op.statusAtual || '',
       obs: $('mr-obs').value.trim()
     });
-    if (data.status === 'ok') { toast(data.mensagem, 'sucesso'); estado.opSelecionada = null; await carregarOPs(); }
+    if (data.status === 'ok') {
+      toast(data.mensagem, 'sucesso');
+      estado.opSelecionada = null;
+      await carregarOPs();
+      if (cfg && cfg.nome === 'QUALIDADE') abrirModalQualidade(op);
+    }
     else toast(data.erro || 'Erro ao gravar', 'erro');
+  } catch(e) { toast('Erro de conexão', 'erro'); }
+  finally    { loading(false); }
+}
+
+// ============================================================
+// MODAL INSPEÇÃO DE QUALIDADE — abre automaticamente após RECEBER
+// quando o setor é QUALIDADE. Grava na planilha de qualidade (AppSheet).
+// ============================================================
+const MQ_CAMPOS = ['etiqueta', 'silk', 'embalagem', 'acessorios', 'case', 'lente'];
+
+function abrirModalQualidade(op) {
+  estado.qualidadeOp = op;
+  $('mq-op').textContent = op.op + ' — ' + op.codigo;
+  MQ_CAMPOS.forEach(id => { $('mq-' + id).value = ''; });
+  $('mq-obs').value = '';
+  atualizarResumoQualidade();
+  $('modal-qualidade').classList.add('ativo');
+}
+
+function fecharModalQualidade() {
+  $('modal-qualidade').classList.remove('ativo');
+  estado.qualidadeOp = null;
+}
+
+function atualizarResumoQualidade() {
+  const total = MQ_CAMPOS.reduce((s, id) => s + (Number($('mq-' + id).value) || 0), 0);
+  $('mq-total').textContent = total;
+  const badge = $('mq-status-badge');
+  badge.textContent = total > 0 ? 'REPROVADO' : 'APROVADO';
+  badge.className = 'pd-badge ' + (total > 0 ? 'vermelho' : 'verde');
+}
+
+async function confirmarQualidade() {
+  const op = estado.qualidadeOp;
+  if (!op) return;
+  loading(true, 'GRAVANDO INSPEÇÃO...');
+  fecharModalQualidade();
+  try {
+    const data = await api({}, {
+      acao: 'registrarQualidade',
+      op: op.op, codigo: op.codigo, qtde: op.qtde, descricao: op.descricao, foto: op.foto,
+      etiqueta:   $('mq-etiqueta').value,
+      silk:       $('mq-silk').value,
+      embalagem:  $('mq-embalagem').value,
+      acessorios: $('mq-acessorios').value,
+      caseProduto:$('mq-case').value,
+      lente:      $('mq-lente').value,
+      obs:        $('mq-obs').value.trim(),
+      operador:   estado.operador.nome
+    });
+    if (data.status === 'ok') toast(data.mensagem, 'sucesso');
+    else toast(data.mensagem || 'Erro ao gravar inspeção', 'erro');
   } catch(e) { toast('Erro de conexão', 'erro'); }
   finally    { loading(false); }
 }
@@ -672,6 +729,12 @@ document.addEventListener('DOMContentLoaded', () => {
   $('mj-cancelar').addEventListener('click', fecharModalRejeitar);
   $('mj-confirmar').addEventListener('click', confirmarRejeitar);
   $('modal-rejeitar').addEventListener('click', e => { if (e.target === $('modal-rejeitar')) fecharModalRejeitar(); });
+
+  // Modal inspeção de qualidade
+  MQ_CAMPOS.forEach(id => $('mq-' + id).addEventListener('input', atualizarResumoQualidade));
+  $('mq-cancelar').addEventListener('click', fecharModalQualidade);
+  $('mq-confirmar').addEventListener('click', confirmarQualidade);
+  $('modal-qualidade').addEventListener('click', e => { if (e.target === $('modal-qualidade')) fecharModalQualidade(); });
 
   // Produção Diária — navegação
   $('btn-pd-voltar').addEventListener('click', pdVoltar);

@@ -449,6 +449,27 @@
   .hist-btn-excluir:hover { background: var(--danger); color: #fff; }
   .hist-editar-form { margin-top: 10px; }
   .pd-badge.laranja { background: #fff5ec; color: var(--accent2); }
+  .pd-badge.vermelho { background: #fff0ee; color: var(--danger); }
+
+  /* Modal Qualidade */
+  .mq-defeitos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .mq-defeito-item { display: flex; flex-direction: column; gap: 6px; }
+  .mq-defeito-item label {
+    font-family: var(--mono); font-size: 10px; color: var(--text2);
+    letter-spacing: .5px; text-transform: uppercase;
+  }
+  .mq-defeito-item input {
+    width: 100%; background: var(--surface2); border: 1.5px solid var(--border);
+    border-radius: 8px; padding: 10px; font-size: 16px; font-family: var(--mono);
+    font-weight: 700; color: var(--text); text-align: center; outline: none;
+  }
+  .mq-defeito-item input:focus { border-color: var(--accent); }
+  .mq-resumo {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--surface2); border-radius: 8px; padding: 10px 14px;
+    font-family: var(--mono); font-size: 12px; color: var(--text2); margin-bottom: 16px;
+  }
+  .mq-resumo strong { font-size: 15px; color: var(--text); }
 
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: #EDF6F4; }
@@ -742,6 +763,39 @@
     <div id="hist-lista" style="display:flex;flex-direction:column;gap:8px;overflow-y:auto;max-height:55vh"></div>
     <div style="margin-top:16px">
       <button class="btn-cancelar" id="btn-fechar-historico" style="width:100%">FECHAR</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- MODAL INSPEÇÃO DE QUALIDADE -->
+<!-- ═══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-qualidade">
+  <div class="modal">
+    <div class="modal-titulo">Inspeção de Qualidade</div>
+    <div class="modal-op" id="mq-op">—</div>
+
+    <div style="font-family:var(--mono);font-size:11px;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">Peças com defeito, por critério</div>
+    <div class="mq-defeitos-grid">
+      <div class="mq-defeito-item"><label>Etiqueta</label><input type="number" id="mq-etiqueta" placeholder="0" inputmode="numeric" min="0"></div>
+      <div class="mq-defeito-item"><label>Silk</label><input type="number" id="mq-silk" placeholder="0" inputmode="numeric" min="0"></div>
+      <div class="mq-defeito-item"><label>Embalagem</label><input type="number" id="mq-embalagem" placeholder="0" inputmode="numeric" min="0"></div>
+      <div class="mq-defeito-item"><label>Acessórios</label><input type="number" id="mq-acessorios" placeholder="0" inputmode="numeric" min="0"></div>
+      <div class="mq-defeito-item"><label>Case</label><input type="number" id="mq-case" placeholder="0" inputmode="numeric" min="0"></div>
+      <div class="mq-defeito-item"><label>Lente</label><input type="number" id="mq-lente" placeholder="0" inputmode="numeric" min="0"></div>
+    </div>
+
+    <div class="mq-resumo">
+      <span>Total de defeitos: <strong id="mq-total">0</strong></span>
+      <span class="pd-badge verde" id="mq-status-badge">APROVADO</span>
+    </div>
+
+    <div style="font-family:var(--mono);font-size:11px;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Observação</div>
+    <textarea class="modal-obs" id="mq-obs" placeholder="Descreva a não conformidade, se houver..."></textarea>
+
+    <div class="modal-btns">
+      <button class="btn-cancelar" id="mq-cancelar">CANCELAR</button>
+      <button class="btn-receber" id="mq-confirmar">✓ SALVAR INSPEÇÃO</button>
     </div>
   </div>
 </div>
