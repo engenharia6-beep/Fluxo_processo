@@ -271,6 +271,10 @@ function abrirModalQualidade(op) {
   $('mq-op').textContent = op.op + ' — ' + op.codigo;
   MQ_CAMPOS.forEach(id => { $('mq-' + id).value = ''; });
   $('mq-obs').value = '';
+  $('mq-status-selecionado').value = '';
+  $('mq-devolver').checked = true;
+  $('mq-devolver-grupo').style.display = 'none';
+  document.querySelectorAll('#modal-qualidade .ml-status-btn').forEach(b => b.classList.remove('ativo'));
   atualizarResumoQualidade();
   $('modal-qualidade').classList.add('ativo');
 }
@@ -283,14 +287,25 @@ function fecharModalQualidade() {
 function atualizarResumoQualidade() {
   const total = MQ_CAMPOS.reduce((s, id) => s + (Number($('mq-' + id).value) || 0), 0);
   $('mq-total').textContent = total;
-  const badge = $('mq-status-badge');
-  badge.textContent = total > 0 ? 'REPROVADO' : 'APROVADO';
-  badge.className = 'pd-badge ' + (total > 0 ? 'vermelho' : 'verde');
+}
+
+// Resultado da inspeção é escolha manual da inspetora — não é calculado
+// a partir da contagem de defeitos.
+function selecionarStatusMQ(status, btn) {
+  document.querySelectorAll('#modal-qualidade .ml-status-btn').forEach(b => b.classList.remove('ativo'));
+  btn.classList.add('ativo');
+  $('mq-status-selecionado').value = status;
+  $('mq-devolver-grupo').style.display = status === 'REPROVADO' ? 'block' : 'none';
 }
 
 async function confirmarQualidade() {
   const op = estado.qualidadeOp;
   if (!op) return;
+  const status = $('mq-status-selecionado').value;
+  if (!status) { toast('Selecione Aprovado ou Reprovado', 'erro'); return; }
+  const devolver = status === 'REPROVADO' && $('mq-devolver').checked;
+  const obs = $('mq-obs').value.trim();
+
   loading(true, 'GRAVANDO INSPEÇÃO...');
   fecharModalQualidade();
   try {
@@ -303,11 +318,24 @@ async function confirmarQualidade() {
       acessorios: $('mq-acessorios').value,
       caseProduto:$('mq-case').value,
       lente:      $('mq-lente').value,
-      obs:        $('mq-obs').value.trim(),
-      operador:   estado.operador.nome
+      status, obs, operador: estado.operador.nome
     });
-    if (data.status === 'ok') toast(data.mensagem, 'sucesso');
-    else toast(data.mensagem || 'Erro ao gravar inspeção', 'erro');
+    if (data.status !== 'ok') { toast(data.mensagem || 'Erro ao gravar inspeção', 'erro'); return; }
+
+    if (devolver) {
+      const rej = await api({}, {
+        acao: 'rejeitarOP', op: op.op, codigo: op.codigo, qtde: op.qtde,
+        pedido: op.pedido, setor: estado.operador.setor, setorDestino: 'PRODUÇÃO',
+        operador: estado.operador.nome, obs: obs || 'Reprovado na inspeção de qualidade'
+      });
+      toast(rej.status === 'ok'
+        ? 'Inspeção registrada (REPROVADO) e OP devolvida para PRODUÇÃO'
+        : (data.mensagem + ' — falhou ao devolver: ' + (rej.erro || rej.mensagem || '')),
+        rej.status === 'ok' ? 'sucesso' : 'erro');
+    } else {
+      toast(data.mensagem, 'sucesso');
+    }
+    await carregarOPs();
   } catch(e) { toast('Erro de conexão', 'erro'); }
   finally    { loading(false); }
 }
@@ -732,6 +760,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Modal inspeção de qualidade
   MQ_CAMPOS.forEach(id => $('mq-' + id).addEventListener('input', atualizarResumoQualidade));
+  $('btn-mq-aprovado').addEventListener('click',  function(){ selecionarStatusMQ('APROVADO',  this); });
+  $('btn-mq-reprovado').addEventListener('click', function(){ selecionarStatusMQ('REPROVADO', this); });
   $('mq-cancelar').addEventListener('click', fecharModalQualidade);
   $('mq-confirmar').addEventListener('click', confirmarQualidade);
   $('modal-qualidade').addEventListener('click', e => { if (e.target === $('modal-qualidade')) fecharModalQualidade(); });

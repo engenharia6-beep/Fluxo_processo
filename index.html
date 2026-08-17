@@ -450,6 +450,8 @@
   .hist-editar-form { margin-top: 10px; }
   .pd-badge.laranja { background: #fff5ec; color: var(--accent2); }
   .pd-badge.vermelho { background: #fff0ee; color: var(--danger); }
+  .ml-status-btn.ativo.aprovado  { border-color: var(--success); background: #e3f5e8; color: var(--success); }
+  .ml-status-btn.ativo.reprovado { border-color: var(--danger);  background: #fff0ee; color: var(--danger); }
 
   /* Modal Qualidade */
   .mq-defeitos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
@@ -787,7 +789,20 @@
 
     <div class="mq-resumo">
       <span>Total de defeitos: <strong id="mq-total">0</strong></span>
-      <span class="pd-badge verde" id="mq-status-badge">APROVADO</span>
+    </div>
+
+    <div style="font-family:var(--mono);font-size:11px;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">Resultado da inspeção</div>
+    <div class="ml-status-grid">
+      <button class="ml-status-btn aprovado"  id="btn-mq-aprovado">✓ Aprovado</button>
+      <button class="ml-status-btn reprovado" id="btn-mq-reprovado">✕ Reprovado</button>
+    </div>
+    <input type="hidden" id="mq-status-selecionado" value="">
+
+    <div id="mq-devolver-grupo" style="display:none;background:#fff0ee;border:1px solid rgba(204,51,34,0.25);border-radius:10px;padding:12px 14px;margin-bottom:16px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" id="mq-devolver" checked style="width:18px;height:18px;accent-color:var(--danger);flex-shrink:0">
+        <span style="font-size:13px;color:var(--text)">Enviar de volta para PRODUÇÃO agora</span>
+      </label>
     </div>
 
     <div style="font-family:var(--mono);font-size:11px;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Observação</div>
