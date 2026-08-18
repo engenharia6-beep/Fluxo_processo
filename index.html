@@ -196,6 +196,16 @@
   .op-qtde span { font-size: 11px; color: var(--text2); font-weight: 400; }
   .op-setor-atual { font-family: var(--mono); font-size: 10px; color: var(--text2); background: var(--surface2); padding: 3px 8px; border-radius: 4px; letter-spacing: 1px; }
 
+  /* ── ABAS RECEBER / INSPECIONAR (setor QUALIDADE) ── */
+  .qualidade-tabs { display: flex; gap: 8px; padding: 12px 16px 0; }
+  .qualidade-tab-btn {
+    flex: 1; background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: 10px; padding: 10px; font-family: var(--mono);
+    font-size: 12px; font-weight: 700; letter-spacing: 1px; color: var(--text2);
+    cursor: pointer; transition: all .2s;
+  }
+  .qualidade-tab-btn.ativo { border-color: var(--accent); background: #f0faf8; color: var(--accent); box-shadow: 0 0 0 2px rgba(10,110,110,0.12); }
+
   /* ── BOTTOM BAR ── */
   .bottom-bar {
     display: flex; gap: 8px; padding: 12px 16px 20px;
@@ -568,6 +578,10 @@
       <button class="btn-sair btn-sair-global">SAIR</button>
     </div>
   </div>
+  <div class="qualidade-tabs" id="qualidade-tabs" style="display:none">
+    <button class="qualidade-tab-btn ativo" id="btn-tab-receber" data-modo="receber">RECEBER</button>
+    <button class="qualidade-tab-btn" id="btn-tab-inspecionar" data-modo="inspecionar">INSPECIONAR</button>
+  </div>
   <div class="toolbar">
     <input class="toolbar-filtro" type="text" id="filtro-pedido" placeholder="Filtrar por pedido..." inputmode="numeric">
     <button class="toolbar-btn" id="btn-limpar-filtro">LIMPAR</button>
@@ -580,7 +594,7 @@
       <div class="empty-state-txt">NENHUMA OP DISPONÍVEL</div>
     </div>
   </div>
-  <div class="bottom-bar">
+  <div class="bottom-bar" id="fluxo-bottom-bar">
     <button class="btn-receber" id="btn-receber" disabled>✓ RECEBER</button>
     <button class="btn-rejeitar" id="btn-rejeitar" disabled>✕ REJEITAR</button>
     <button class="btn-voltar-modulos" id="btn-voltar-modulos">◀ MÓDULOS</button>

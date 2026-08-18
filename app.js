@@ -43,6 +43,7 @@ let estado = {
   opsFiltradas:  [],
   opSelecionada: null,
   setorDestino:  null,
+  modoQualidade: 'receber', // 'receber' | 'inspecionar' — só relevante pro setor QUALIDADE
   pd: {
     processo:          null,
     opSelecionada:     null,
@@ -123,18 +124,35 @@ function mostrarTelaModulos() {
 // ============================================================
 // FLUXO PRODUTIVO
 // ============================================================
+function ehQualidade() { return !!(getConfigSetor(estado.operador?.setor)?.nome === 'QUALIDADE'); }
+
 function entrarNaPrincipal() {
   $('hd-nome').textContent  = estado.operador.nome;
   $('hd-setor').textContent = estado.operador.setor;
   $('btn-voltar-modulos').style.display = ehProducao() ? 'block' : 'none';
+  estado.modoQualidade = 'receber';
+  $('qualidade-tabs').style.display = ehQualidade() ? 'flex' : 'none';
+  document.querySelectorAll('.qualidade-tab-btn').forEach(b => b.classList.toggle('ativo', b.dataset.modo === 'receber'));
+  $('fluxo-bottom-bar').style.display = 'flex';
   mostrarTela('tela-principal');
+  carregarOPs();
+}
+
+function mudarModoQualidade(modo) {
+  if (estado.modoQualidade === modo) return;
+  estado.modoQualidade = modo;
+  document.querySelectorAll('.qualidade-tab-btn').forEach(b => b.classList.toggle('ativo', b.dataset.modo === modo));
+  $('fluxo-bottom-bar').style.display = modo === 'receber' ? 'flex' : 'none';
   carregarOPs();
 }
 
 async function carregarOPs() {
   loading(true, 'BUSCANDO OPs...');
   try {
-    const data = await api({ acao: 'getOPsDisponiveis', setor: estado.operador.setor });
+    const emInspecao = ehQualidade() && estado.modoQualidade === 'inspecionar';
+    const data = emInspecao
+      ? await api({ acao: 'getOPsAguardandoInspecao' })
+      : await api({ acao: 'getOPsDisponiveis', setor: estado.operador.setor });
     if (data.status === 'ok') { estado.ops = data.ops || []; aplicarFiltro(); }
     else toast('Erro ao carregar OPs', 'erro');
   } catch(e) { toast('Erro de conexão', 'erro'); }
@@ -153,9 +171,11 @@ function aplicarFiltro() {
 
 function renderizarLista() {
   const lista = $('ops-lista');
+  const emInspecao = ehQualidade() && estado.modoQualidade === 'inspecionar';
   $('contador-ops').textContent = estado.opsFiltradas.length;
   if (!estado.opsFiltradas.length) {
-    lista.innerHTML = `<div class="empty-state"><div class="empty-state-icon">✓</div><div class="empty-state-txt">NENHUMA OP DISPONÍVEL</div></div>`;
+    const txt = emInspecao ? 'NENHUMA OP AGUARDANDO INSPEÇÃO' : 'NENHUMA OP DISPONÍVEL';
+    lista.innerHTML = `<div class="empty-state"><div class="empty-state-icon">✓</div><div class="empty-state-txt">${txt}</div></div>`;
     return;
   }
   lista.innerHTML = estado.opsFiltradas.map(op => `
@@ -173,11 +193,20 @@ function renderizarLista() {
       </div>
       <div class="op-footer">
         <div class="op-qtde">${op.qtde} <span>UN</span></div>
-        <div class="op-setor-atual">${op.statusAtual}</div>
+        ${emInspecao
+          ? '<span class="pd-badge laranja">● AGUARDANDO INSPEÇÃO</span>'
+          : `<div class="op-setor-atual">${op.statusAtual}</div>`}
       </div>
     </div>`).join('');
   lista.querySelectorAll('.op-card').forEach(card => {
-    card.addEventListener('click', () => selecionarOP(card.dataset.op));
+    if (emInspecao) {
+      card.addEventListener('click', () => {
+        const op = estado.opsFiltradas.find(o => String(o.op) === card.dataset.op);
+        if (op) abrirModalQualidade(op);
+      });
+    } else {
+      card.addEventListener('click', () => selecionarOP(card.dataset.op));
+    }
   });
 }
 
@@ -253,7 +282,6 @@ async function confirmarReceber() {
       toast(data.mensagem, 'sucesso');
       estado.opSelecionada = null;
       await carregarOPs();
-      if (cfg && cfg.nome === 'QUALIDADE') abrirModalQualidade(op);
     }
     else toast(data.erro || 'Erro ao gravar', 'erro');
   } catch(e) { toast('Erro de conexão', 'erro'); }
@@ -261,8 +289,8 @@ async function confirmarReceber() {
 }
 
 // ============================================================
-// MODAL INSPEÇÃO DE QUALIDADE — abre automaticamente após RECEBER
-// quando o setor é QUALIDADE. Grava na planilha de qualidade (AppSheet).
+// MODAL INSPEÇÃO DE QUALIDADE — aberto a partir da aba "Inspecionar" (OPs
+// já recebidas pela Qualidade). Grava na planilha de qualidade (AppSheet).
 // ============================================================
 const MQ_CAMPOS = ['etiqueta', 'silk', 'embalagem', 'acessorios', 'case', 'lente'];
 
@@ -332,6 +360,15 @@ async function confirmarQualidade() {
         ? 'Inspeção registrada (REPROVADO) e OP devolvida para PRODUÇÃO'
         : (data.mensagem + ' — falhou ao devolver: ' + (rej.erro || rej.mensagem || '')),
         rej.status === 'ok' ? 'sucesso' : 'erro');
+    } else if (status === 'APROVADO') {
+      const av = await api({}, {
+        acao: 'avancarQualidade', op: op.op, codigo: op.codigo, qtde: op.qtde,
+        pedido: op.pedido, setor: estado.operador.setor, operador: estado.operador.nome, obs
+      });
+      toast(av.status === 'ok'
+        ? 'Inspeção registrada (APROVADO) e OP liberada para Consolidação'
+        : (data.mensagem + ' — falhou ao liberar: ' + (av.erro || av.mensagem || '')),
+        av.status === 'ok' ? 'sucesso' : 'erro');
     } else {
       toast(data.mensagem, 'sucesso');
     }
@@ -743,6 +780,8 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-modulo-pd').addEventListener('click', entrarProducaoDiaria);
 
   // Fluxo principal
+  $('btn-tab-receber').addEventListener('click', () => mudarModoQualidade('receber'));
+  $('btn-tab-inspecionar').addEventListener('click', () => mudarModoQualidade('inspecionar'));
   $('btn-atualizar').addEventListener('click', carregarOPs);
   $('filtro-pedido').addEventListener('input', aplicarFiltro);
   $('btn-limpar-filtro').addEventListener('click', () => { $('filtro-pedido').value = ''; aplicarFiltro(); });
