@@ -297,6 +297,9 @@ const MQ_CAMPOS = ['etiqueta', 'silk', 'embalagem', 'acessorios', 'case', 'lente
 function abrirModalQualidade(op) {
   estado.qualidadeOp = op;
   $('mq-op').textContent = op.op + ' — ' + op.codigo;
+  const foto = $('mq-foto');
+  if (op.foto) { foto.src = op.foto; foto.style.display = 'block'; }
+  else { foto.removeAttribute('src'); foto.style.display = 'none'; }
   MQ_CAMPOS.forEach(id => { $('mq-' + id).value = ''; });
   $('mq-obs').value = '';
   $('mq-status-selecionado').value = '';
@@ -315,6 +318,13 @@ function fecharModalQualidade() {
 function atualizarResumoQualidade() {
   const total = MQ_CAMPOS.reduce((s, id) => s + (Number($('mq-' + id).value) || 0), 0);
   $('mq-total').textContent = total;
+}
+
+function ajustarDefeitoMQ(alvo, delta) {
+  const input = $(alvo);
+  const novo = Math.max(0, (Number(input.value) || 0) + delta);
+  input.value = novo;
+  atualizarResumoQualidade();
 }
 
 // Resultado da inspeção é escolha manual da inspetora — não é calculado
@@ -799,6 +809,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Modal inspeção de qualidade
   MQ_CAMPOS.forEach(id => $('mq-' + id).addEventListener('input', atualizarResumoQualidade));
+  document.querySelectorAll('#modal-qualidade .mq-stepper-btn').forEach(btn => {
+    btn.addEventListener('click', () => ajustarDefeitoMQ(btn.dataset.alvo, Number(btn.dataset.delta)));
+  });
   $('btn-mq-aprovado').addEventListener('click',  function(){ selecionarStatusMQ('APROVADO',  this); });
   $('btn-mq-reprovado').addEventListener('click', function(){ selecionarStatusMQ('REPROVADO', this); });
   $('mq-cancelar').addEventListener('click', fecharModalQualidade);

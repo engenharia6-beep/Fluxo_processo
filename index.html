@@ -464,14 +464,23 @@
   .ml-status-btn.ativo.reprovado { border-color: var(--danger);  background: #fff0ee; color: var(--danger); }
 
   /* Modal Qualidade */
+  .mq-foto { width: 100%; max-height: 160px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 16px; }
   .mq-defeitos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
   .mq-defeito-item { display: flex; flex-direction: column; gap: 6px; }
   .mq-defeito-item label {
     font-family: var(--mono); font-size: 10px; color: var(--text2);
     letter-spacing: .5px; text-transform: uppercase;
   }
+  .mq-stepper { display: flex; align-items: stretch; gap: 6px; }
+  .mq-stepper-btn {
+    flex-shrink: 0; width: 34px; background: var(--surface2); border: 1.5px solid var(--border);
+    border-radius: 8px; font-family: var(--mono); font-size: 18px; font-weight: 700;
+    color: var(--accent); cursor: pointer; transition: all .15s; user-select: none;
+  }
+  .mq-stepper-btn:hover { border-color: var(--accent); background: #f0faf8; }
+  .mq-stepper-btn:active { transform: scale(0.92); }
   .mq-defeito-item input {
-    width: 100%; background: var(--surface2); border: 1.5px solid var(--border);
+    width: 100%; min-width: 0; background: var(--surface2); border: 1.5px solid var(--border);
     border-radius: 8px; padding: 10px; font-size: 16px; font-family: var(--mono);
     font-weight: 700; color: var(--text); text-align: center; outline: none;
   }
@@ -790,15 +799,52 @@
   <div class="modal">
     <div class="modal-titulo">Inspeção de Qualidade</div>
     <div class="modal-op" id="mq-op">—</div>
+    <img id="mq-foto" class="mq-foto" alt="" style="display:none" onerror="this.style.display='none'">
 
     <div style="font-family:var(--mono);font-size:11px;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">Peças com defeito, por critério</div>
     <div class="mq-defeitos-grid">
-      <div class="mq-defeito-item"><label>Etiqueta</label><input type="number" id="mq-etiqueta" placeholder="0" inputmode="numeric" min="0"></div>
-      <div class="mq-defeito-item"><label>Silk</label><input type="number" id="mq-silk" placeholder="0" inputmode="numeric" min="0"></div>
-      <div class="mq-defeito-item"><label>Embalagem</label><input type="number" id="mq-embalagem" placeholder="0" inputmode="numeric" min="0"></div>
-      <div class="mq-defeito-item"><label>Acessórios</label><input type="number" id="mq-acessorios" placeholder="0" inputmode="numeric" min="0"></div>
-      <div class="mq-defeito-item"><label>Case</label><input type="number" id="mq-case" placeholder="0" inputmode="numeric" min="0"></div>
-      <div class="mq-defeito-item"><label>Lente</label><input type="number" id="mq-lente" placeholder="0" inputmode="numeric" min="0"></div>
+      <div class="mq-defeito-item"><label>Etiqueta</label>
+        <div class="mq-stepper">
+          <button type="button" class="mq-stepper-btn" data-alvo="mq-etiqueta" data-delta="-1">−</button>
+          <input type="number" id="mq-etiqueta" placeholder="0" inputmode="numeric" min="0">
+          <button type="button" class="mq-stepper-btn" data-alvo="mq-etiqueta" data-delta="1">+</button>
+        </div>
+      </div>
+      <div class="mq-defeito-item"><label>Silk</label>
+        <div class="mq-stepper">
+          <button type="button" class="mq-stepper-btn" data-alvo="mq-silk" data-delta="-1">−</button>
+          <input type="number" id="mq-silk" placeholder="0" inputmode="numeric" min="0">
+          <button type="button" class="mq-stepper-btn" data-alvo="mq-silk" data-delta="1">+</button>
+        </div>
+      </div>
+      <div class="mq-defeito-item"><label>Embalagem</label>
+        <div class="mq-stepper">
+          <button type="button" class="mq-stepper-btn" data-alvo="mq-embalagem" data-delta="-1">−</button>
+          <input type="number" id="mq-embalagem" placeholder="0" inputmode="numeric" min="0">
+          <button type="button" class="mq-stepper-btn" data-alvo="mq-embalagem" data-delta="1">+</button>
+        </div>
+      </div>
+      <div class="mq-defeito-item"><label>Acessórios</label>
+        <div class="mq-stepper">
+          <button type="button" class="mq-stepper-btn" data-alvo="mq-acessorios" data-delta="-1">−</button>
+          <input type="number" id="mq-acessorios" placeholder="0" inputmode="numeric" min="0">
+          <button type="button" class="mq-stepper-btn" data-alvo="mq-acessorios" data-delta="1">+</button>
+        </div>
+      </div>
+      <div class="mq-defeito-item"><label>Case</label>
+        <div class="mq-stepper">
+          <button type="button" class="mq-stepper-btn" data-alvo="mq-case" data-delta="-1">−</button>
+          <input type="number" id="mq-case" placeholder="0" inputmode="numeric" min="0">
+          <button type="button" class="mq-stepper-btn" data-alvo="mq-case" data-delta="1">+</button>
+        </div>
+      </div>
+      <div class="mq-defeito-item"><label>Lente</label>
+        <div class="mq-stepper">
+          <button type="button" class="mq-stepper-btn" data-alvo="mq-lente" data-delta="-1">−</button>
+          <input type="number" id="mq-lente" placeholder="0" inputmode="numeric" min="0">
+          <button type="button" class="mq-stepper-btn" data-alvo="mq-lente" data-delta="1">+</button>
+        </div>
+      </div>
     </div>
 
     <div class="mq-resumo">
