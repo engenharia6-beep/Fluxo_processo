@@ -584,6 +584,7 @@
     <div class="header-user">
       <div class="header-setor" id="hd-setor">—</div>
       <div style="font-size:13px;color:rgba(255,255,255,0.8)" id="hd-nome">—</div>
+      <button class="btn-sair" id="btn-config-status" style="display:none">⚙ STATUS</button>
       <button class="btn-sair btn-sair-global">SAIR</button>
     </div>
   </div>
@@ -731,6 +732,23 @@
     <div class="modal-btns">
       <button class="btn-cancelar" id="mj-cancelar">CANCELAR</button>
       <button class="btn-rejeitar" style="flex:2;padding:14px" id="mj-confirmar">✕ CONFIRMAR</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<!-- MODAL CONFIG STATUS (só admin) -->
+<!-- ═══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-config-status">
+  <div class="modal" style="max-height:85vh;overflow-y:auto">
+    <div class="modal-titulo">Status que bloqueiam a bipagem</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px">
+      Marcado = bloqueia (a OP some da lista). Desmarcado = não bloqueia (a OP segue no setor em que está).
+    </div>
+    <div id="cs-lista"></div>
+    <div class="modal-btns" style="margin-top:16px">
+      <button class="btn-cancelar" id="cs-cancelar">CANCELAR</button>
+      <button class="btn-receber" style="flex:2;padding:14px" id="cs-salvar">✓ SALVAR</button>
     </div>
   </div>
 </div>

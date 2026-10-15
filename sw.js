@@ -1,4 +1,4 @@
-const CACHE = 'sif-v2';
+const CACHE = 'sif-v3';
 const ASSETS = [
   './',
   './index.html',

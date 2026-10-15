@@ -65,6 +65,84 @@ function _fotosPorCodigo(ss) {
   return fotos;
 }
 
+// Status da aba Pendencias que NÃO impedem o fluxo produtivo (pendência
+// comercial/logística). Enquanto a OP estiver num desses status, ela continua
+// visível no setor em que realmente está (última movimentação em
+// Fluxo_processo). A lista é editável pelo admin no app (salvarConfigStatus) e
+// fica nas Script Properties; o valor abaixo é só o padrão inicial.
+// Valores sempre normalizados: sem acento, ponto ou hífen.
+const STATUS_NAO_BLOQUEIAM_PADRAO = ['PENDENCIA COMERCIAL', 'AG IMPORTACAO'];
+const PROP_NAO_BLOQUEIAM = 'STATUS_NAO_BLOQUEIAM';
+const ADMINS = ['DELMER'];
+// Status que representam posições reais do fluxo — não podem ser "liberados".
+const STATUS_FLUXO = ['PCP', 'ESTOQUE', 'PRODUCAO', 'QUALIDADE', 'CONSOLIDACAO', 'EXPEDIDO', 'PA'];
+
+let _cacheNaoBloqueiam = null;
+function _statusNaoBloqueiam() {
+  if (_cacheNaoBloqueiam) return _cacheNaoBloqueiam;
+  const salvo = PropertiesService.getScriptProperties().getProperty(PROP_NAO_BLOQUEIAM);
+  _cacheNaoBloqueiam = salvo ? JSON.parse(salvo) : STATUS_NAO_BLOQUEIAM_PADRAO;
+  return _cacheNaoBloqueiam;
+}
+
+// Operador ativo com nome+PIN válidos e presente em ADMINS.
+function _autenticarAdmin(body) {
+  const r = login({ nome: body.nome, pin: body.pin });
+  return r.status === 'ok' && ADMINS.includes(normalizar(r.operador.nome));
+}
+
+// Lista os status distintos da aba Pendencias (+ os já liberados que não
+// aparecem mais lá) com a flag de bloqueio, pra tela de configuração.
+function getConfigStatus(body) {
+  if (!_autenticarAdmin(body)) return { status: 'erro', mensagem: 'Sem permissao' };
+  const ss   = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const rows = ss.getSheetByName(ABAS.pendencias).getDataRange().getValues();
+  const liberados = _statusNaoBloqueiam();
+  const vistos = {};
+  for (let i = 1; i < rows.length; i++) {
+    const raw = String(rows[i][8]).trim();
+    const chave = normalizar(raw);
+    if (raw && !STATUS_FLUXO.includes(chave) && !vistos[chave]) vistos[chave] = raw;
+  }
+  liberados.forEach(c => { if (!vistos[c]) vistos[c] = c; });
+  const lista = Object.keys(vistos).sort().map(c => ({
+    status: vistos[c], chave: c, bloqueia: !liberados.includes(c)
+  }));
+  return { status: 'ok', statuses: lista };
+}
+
+function salvarConfigStatus(body) {
+  if (!_autenticarAdmin(body)) return { status: 'erro', mensagem: 'Sem permissao' };
+  const lista = (body.naoBloqueiam || [])
+    .map(normalizar)
+    .filter(c => c && !STATUS_FLUXO.includes(c));
+  PropertiesService.getScriptProperties().setProperty(PROP_NAO_BLOQUEIAM, JSON.stringify(lista));
+  _cacheNaoBloqueiam = null;
+  return { status: 'ok', mensagem: 'Configuracao salva', naoBloqueiam: lista };
+}
+
+// Mapa {op: setorAtualNormalizado} pela última movimentação em Fluxo_processo
+// (coluna K = destino gravado — mesma convenção que alimenta o STATUS da
+// Pendencias). OP sem nenhum registro ainda está no início do fluxo (ESTOQUE).
+function _setorAtualPorFluxo(ss) {
+  const aba  = ss.getSheetByName(ABAS.fluxo);
+  const rows = aba ? aba.getDataRange().getValues() : [];
+  const mapa = {};
+  for (let i = 1; i < rows.length; i++) {
+    const op = String(rows[i][4]).trim();
+    if (op && rows[i][10]) mapa[op] = normalizar(rows[i][10]);
+  }
+  return mapa;
+}
+
+// Status usado pra decidir em qual setor a OP aparece: o da Pendencias,
+// exceto se for um status que não bloqueia — aí vale a posição real no fluxo.
+function _statusEfetivo(statusRaw, op, posicoes) {
+  const s = normalizar(statusRaw);
+  if (!_statusNaoBloqueiam().includes(s)) return s;
+  return posicoes[String(op).trim()] || 'ESTOQUE';
+}
+
 function responder(data) {
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -197,6 +275,8 @@ function doPost(e) {
     if (acao === 'registrarProducao') return responder(registrarProducao(body));
     if (acao === 'registrarQualidade')return responder(registrarQualidade(body));
     if (acao === 'avancarQualidade')  return responder(avancarQualidade(body));
+    if (acao === 'getConfigStatus')   return responder(getConfigStatus(body));
+    if (acao === 'salvarConfigStatus')return responder(salvarConfigStatus(body));
     return responder({ erro: 'Acao desconhecida' });
   } catch(err) {
     return responder({ erro: err.toString() });
@@ -263,14 +343,16 @@ function getOPsDisponiveis(setorOperador) {
 
   const pendRows = abaPend.getDataRange().getValues();
   const fotos = _fotosPorCodigo(ss);
+  const posicoes = _setorAtualPorFluxo(ss);
   const ops = [];
   for (let i = 1; i < pendRows.length; i++) {
     const op       = pendRows[i][7];
     const statusRaw= pendRows[i][8];
     if (!op) continue;
+    const statusEf = _statusEfetivo(statusRaw, op, posicoes);
     const STATUS_PCP = ['PCP','ESTOQUE','PRODUCAO','QUALIDADE','CONSOLIDACAO'];
-    if (ehPCP) { if (!STATUS_PCP.includes(normalizar(statusRaw))) continue; }
-    else        { if (normalizar(statusRaw) !== config.origem) continue; }
+    if (ehPCP) { if (!STATUS_PCP.includes(statusEf)) continue; }
+    else        { if (statusEf !== config.origem) continue; }
 
     // opsPagas === null => falha ao ler o Estoque, deixa passar (fail-open)
     if (exigePago && opsPagas && !opsPagas[String(op).trim()]) continue;
@@ -299,12 +381,13 @@ function getOPsAguardandoInspecao() {
   const abaPend = ss.getSheetByName(ABAS.pendencias);
   const pendRows= abaPend.getDataRange().getValues();
   const fotos   = _fotosPorCodigo(ss);
+  const posicoes = _setorAtualPorFluxo(ss);
   const ops = [];
   for (let i = 1; i < pendRows.length; i++) {
     const op        = pendRows[i][7];
     const statusRaw = pendRows[i][8];
     if (!op) continue;
-    if (normalizar(statusRaw) !== 'QUALIDADE') continue;
+    if (_statusEfetivo(statusRaw, op, posicoes) !== 'QUALIDADE') continue;
     const codigoStr = String(pendRows[i][2]).trim();
     ops.push({
       op: String(op), codigo: codigoStr, descricao: String(pendRows[i][3]),
@@ -341,12 +424,13 @@ function getOPsProducao() {
   const fotos = _fotosPorCodigo(ss);
 
   const STATUS_ATIVOS = ['PCP','ESTOQUE','PRODUCAO','QUALIDADE','CONSOLIDACAO'];
+  const posicoes = _setorAtualPorFluxo(ss);
   const ops = [];
   for (let i = 1; i < pendRows.length; i++) {
     const op        = pendRows[i][7];
     const statusRaw = pendRows[i][8];
     if (!op) continue;
-    if (!STATUS_ATIVOS.includes(normalizar(statusRaw))) continue;
+    if (!STATUS_ATIVOS.includes(_statusEfetivo(statusRaw, op, posicoes))) continue;
     const codigoStr = String(pendRows[i][2]).trim();
     const opStr     = String(op).trim();
     ops.push({

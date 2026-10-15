@@ -102,6 +102,7 @@ async function fazerLogin() {
     const data = await api({}, { acao: 'login', nome, pin });
     if (data.status === 'ok') {
       estado.operador = data.operador;
+      estado.pin = pin; // só em memória — reenviado nas ações de admin
       ehProducao() ? mostrarTelaModulos() : entrarNaPrincipal();
     } else {
       $('login-erro').textContent = data.mensagem || 'Usuário ou PIN inválido';
@@ -129,6 +130,7 @@ function ehQualidade() { return !!(getConfigSetor(estado.operador?.setor)?.nome 
 function entrarNaPrincipal() {
   $('hd-nome').textContent  = estado.operador.nome;
   $('hd-setor').textContent = estado.operador.setor;
+  $('btn-config-status').style.display = ehAdmin() ? 'inline-block' : 'none';
   $('btn-voltar-modulos').style.display = ehProducao() ? 'block' : 'none';
   estado.modoQualidade = 'receber';
   $('qualidade-tabs').style.display = ehQualidade() ? 'flex' : 'none';
@@ -136,6 +138,46 @@ function entrarNaPrincipal() {
   $('fluxo-bottom-bar').style.display = 'flex';
   mostrarTela('tela-principal');
   carregarOPs();
+}
+
+// ============================================================
+// CONFIG DE STATUS (admin) — o backend revalida nome+PIN; aqui é só UI
+// ============================================================
+function ehAdmin() { return String(estado.operador?.nome || '').trim().toUpperCase() === 'DELMER'; }
+
+async function abrirConfigStatus() {
+  loading(true, 'CARREGANDO...');
+  try {
+    const data = await api({}, { acao: 'getConfigStatus', nome: estado.operador.nome, pin: estado.pin });
+    if (data.status !== 'ok') { toast(data.mensagem || 'Erro ao carregar', 'erro'); return; }
+    const lista = $('cs-lista');
+    lista.innerHTML = '';
+    if (!data.statuses.length) lista.textContent = 'Nenhum status encontrado na aba Pendencias.';
+    data.statuses.forEach(s => {
+      const lbl = document.createElement('label');
+      lbl.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border,#ddd);font-size:14px';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = s.bloqueia; cb.dataset.chave = s.chave;
+      lbl.append(cb, document.createTextNode(s.status));
+      lista.appendChild(lbl);
+    });
+    $('modal-config-status').classList.add('ativo');
+  } catch(e) { toast('Erro de conexão', 'erro'); }
+  finally    { loading(false); }
+}
+
+async function salvarConfigStatus() {
+  const naoBloqueiam = [...document.querySelectorAll('#cs-lista input:not(:checked)')].map(cb => cb.dataset.chave);
+  loading(true, 'SALVANDO...');
+  try {
+    const data = await api({}, { acao: 'salvarConfigStatus', nome: estado.operador.nome, pin: estado.pin, naoBloqueiam });
+    if (data.status === 'ok') {
+      toast('Configuração salva', 'sucesso');
+      $('modal-config-status').classList.remove('ativo');
+      carregarOPs();
+    } else toast(data.mensagem || 'Erro ao salvar', 'erro');
+  } catch(e) { toast('Erro de conexão', 'erro'); }
+  finally    { loading(false); }
 }
 
 function mudarModoQualidade(modo) {
@@ -798,6 +840,9 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-receber').addEventListener('click', abrirModalReceber);
   $('btn-rejeitar').addEventListener('click', abrirModalRejeitar);
   $('btn-voltar-modulos').addEventListener('click', mostrarTelaModulos);
+  $('btn-config-status').addEventListener('click', abrirConfigStatus);
+  $('cs-salvar').addEventListener('click', salvarConfigStatus);
+  $('cs-cancelar').addEventListener('click', () => $('modal-config-status').classList.remove('ativo'));
 
   // Modal receber/rejeitar
   $('mr-cancelar').addEventListener('click', fecharModalReceber);
